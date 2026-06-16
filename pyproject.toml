@@ -13,6 +13,10 @@ dependencies = [
     "httpx>=0.27",
     "apprise>=1.8",
     "apscheduler>=3.10",
+    # APScheduler needs tzlocal at import time. Pinned directly because the
+    # tzlocal 5.4.2 wheel ships only dist-info (no module) and breaks `import
+    # apscheduler`; exclude it so resolution lands on a working release.
+    "tzlocal>=5.2,!=5.4.2",
     "pydantic-settings>=2.4",
     "cryptography>=43.0",
 ]
