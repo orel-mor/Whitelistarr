@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v1.0.1-dev.3 (2026-06-16)
+
+### 🐛 Bug Fixes
+
+- Serve static assets via constant path lookup
+  ([`b073e21`](https://github.com/orel-mor/Whitelistarr/commit/b073e216f95dff7d358058c4bc19d0196babba10))
+
+
 ## v1.0.1-dev.2 (2026-06-16)
 
 ### 🐛 Bug Fixes
