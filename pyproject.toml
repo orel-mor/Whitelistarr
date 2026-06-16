@@ -1,6 +1,6 @@
 [project]
 name = "whitelistarr"
-version = "1.8.0"
+version = "1.0.0-dev.1"
 description = "Automatically sync Sonarr/Radarr requester tags to Plex labels and send Apprise notifications for watch milestones."
 readme = "README.md"
 license = "MIT"
