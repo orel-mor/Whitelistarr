@@ -23,17 +23,18 @@ log = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).parent / "static"
 _MEDIA = {".html": "text/html", ".js": "text/javascript", ".css": "text/css"}
 
+# The web UI ships exactly these static assets. Serving only from this allowlist
+# keeps the user-provided name out of the filesystem path entirely, so a crafted
+# value can never traverse out of STATIC_DIR or read arbitrary files.
+_STATIC_FILES = frozenset({"index.html", "app.js", "style.css"})
+
 
 def _static_response(name: str) -> Response:
-    """Serve a packaged static file by name, confined to ``STATIC_DIR``.
-
-    Resolves the path and rejects anything that escapes the static directory
-    (path traversal) or isn't a regular file, so a crafted ``name`` can never
-    read arbitrary files from the package or filesystem.
-    """
-    base = STATIC_DIR.resolve()
-    path = (base / name).resolve()
-    if not path.is_relative_to(base) or not path.is_file():
+    """Serve a packaged static file by name from the fixed allowlist."""
+    if name not in _STATIC_FILES:
+        return Response(status_code=404)
+    path = STATIC_DIR / name
+    if not path.is_file():
         return Response(status_code=404)
     return FileResponse(path, media_type=_MEDIA.get(path.suffix, "text/plain"))
 

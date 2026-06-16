@@ -50,7 +50,11 @@ class ConfigStore:
             try:
                 data[field] = self._fernet.decrypt(token.encode()).decode()
             except (InvalidToken, AttributeError):
-                log.warning("Could not decrypt %s (wrong PAL_SECRET_KEY?); treating as unset", field)
+                # Don't log the field name: it's iterated from the secret-field
+                # set, so static analysis flags it as logging secret data. A
+                # decrypt failure almost always means PAL_SECRET_KEY changed for
+                # every secret anyway, so the generic message is enough.
+                log.warning("Could not decrypt a stored secret (wrong PAL_SECRET_KEY?); treating as unset")
                 data[field] = ""
         return data
 
