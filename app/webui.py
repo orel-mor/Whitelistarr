@@ -24,6 +24,20 @@ STATIC_DIR = Path(__file__).parent / "static"
 _MEDIA = {".html": "text/html", ".js": "text/javascript", ".css": "text/css"}
 
 
+def _static_response(name: str) -> Response:
+    """Serve a packaged static file by name, confined to ``STATIC_DIR``.
+
+    Resolves the path and rejects anything that escapes the static directory
+    (path traversal) or isn't a regular file, so a crafted ``name`` can never
+    read arbitrary files from the package or filesystem.
+    """
+    base = STATIC_DIR.resolve()
+    path = (base / name).resolve()
+    if not path.is_relative_to(base) or not path.is_file():
+        return Response(status_code=404)
+    return FileResponse(path, media_type=_MEDIA.get(path.suffix, "text/plain"))
+
+
 def create_webui_router(
     settings: Settings,
     store: Any,
@@ -35,19 +49,13 @@ def create_webui_router(
     keys = set(field_keys())
     secrets = set(secret_keys())
 
-    def _static(name: str) -> Response:
-        path = STATIC_DIR / name
-        if not path.exists():
-            return Response(status_code=404)
-        return FileResponse(path, media_type=_MEDIA.get(path.suffix, "text/plain"))
-
     @router.get("/")
     async def index() -> Response:
-        return _static("index.html")
+        return _static_response("index.html")
 
     @router.get("/static/{name}")
     async def static_file(name: str) -> Response:
-        return _static(name)
+        return _static_response(name)
 
     @router.get("/api/schema")
     async def schema() -> dict:
