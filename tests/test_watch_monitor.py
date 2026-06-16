@@ -90,7 +90,7 @@ class FakeNotifier:
 def _request():
     return RequestInfo(
         media_type="movie", tmdb_id=603, tvdb_id=None,
-        requester="sister", requester_name="Sister", rating_key=None,
+        requester="family", requester_name="Family", rating_key=None,
     )
 
 
@@ -117,7 +117,7 @@ def test_notifies_when_requester_watched():
     state = StateStore(":memory:")
     _monitor(plex, tautulli, notifier, state).scan()
     assert len(notifier.sent) == 1
-    assert "Sister" in notifier.sent[0][1]
+    assert "Family" in notifier.sent[0][1]
     assert "Dune" in notifier.sent[0][1]
 
 

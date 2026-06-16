@@ -5,15 +5,15 @@ from app.config import Settings, parse_csv, parse_tag_label_map
 
 class TestParseTagLabelMap:
     def test_parses_single_pair(self):
-        assert parse_tag_label_map("niece-ok:kids-allowed") == {"niece-ok": "kids-allowed"}
+        assert parse_tag_label_map("kids:kids-allowed") == {"kids": "kids-allowed"}
 
     def test_parses_multiple_pairs(self):
-        result = parse_tag_label_map("niece-ok:kids-allowed,sister:shared")
-        assert result == {"niece-ok": "kids-allowed", "sister": "shared"}
+        result = parse_tag_label_map("kids:kids-allowed,family:shared")
+        assert result == {"kids": "kids-allowed", "family": "shared"}
 
     def test_trims_whitespace_around_entries_and_pairs(self):
-        result = parse_tag_label_map(" niece-ok : kids-allowed ,  sister:shared ")
-        assert result == {"niece-ok": "kids-allowed", "sister": "shared"}
+        result = parse_tag_label_map(" kids : kids-allowed ,  family:shared ")
+        assert result == {"kids": "kids-allowed", "family": "shared"}
 
     def test_empty_string_returns_empty_dict(self):
         assert parse_tag_label_map("") == {}
@@ -25,7 +25,7 @@ class TestParseTagLabelMap:
 
     def test_raises_on_entry_without_colon(self):
         with pytest.raises(ValueError):
-            parse_tag_label_map("niece-ok,sister:shared")
+            parse_tag_label_map("kids,family:shared")
 
     def test_raises_on_empty_tag_or_label(self):
         with pytest.raises(ValueError):
@@ -56,7 +56,7 @@ def _base_env(**overrides):
         "SONARR_API_KEY": "sk",
         "SEERR_URL": "http://seerr:5055",
         "SEERR_API_KEY": "ok",
-        "TAG_LABEL_MAP": "niece-ok:kids-allowed,sister:shared",
+        "TAG_LABEL_MAP": "kids:kids-allowed,family:shared",
     }
     env.update(overrides)
     return env
@@ -69,7 +69,7 @@ class TestSettings:
         s = Settings()
         assert s.plex_url == "http://plex:32400"
         assert s.seerr_url == "http://seerr:5055"
-        assert s.label_map == {"niece-ok": "kids-allowed", "sister": "shared"}
+        assert s.label_map == {"kids": "kids-allowed", "family": "shared"}
         assert s.managed_labels == {"kids-allowed", "shared"}
 
     def test_legacy_overseerr_env_still_accepted(self, monkeypatch):

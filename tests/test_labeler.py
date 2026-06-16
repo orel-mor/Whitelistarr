@@ -50,16 +50,16 @@ class FakeItem:
             self.removed.append(label)
 
 
-LABEL_MAP = {"niece-ok": "kids-allowed", "sister": "shared"}
+LABEL_MAP = {"kids": "kids-allowed", "family": "shared"}
 MANAGED = {"kids-allowed", "shared"}
 
 
 class TestDesiredLabels:
     def test_maps_known_tags(self):
-        assert desired_labels(["niece-ok", "sister"], LABEL_MAP) == {"kids-allowed", "shared"}
+        assert desired_labels(["kids", "family"], LABEL_MAP) == {"kids-allowed", "shared"}
 
     def test_ignores_unmapped_tags(self):
-        assert desired_labels(["niece-ok", "random-tag"], LABEL_MAP) == {"kids-allowed"}
+        assert desired_labels(["kids", "random-tag"], LABEL_MAP) == {"kids-allowed"}
 
     def test_no_tags_is_empty(self):
         assert desired_labels([], LABEL_MAP) == set()

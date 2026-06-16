@@ -12,7 +12,7 @@ def _env(monkeypatch, tmp_path, **over):
         "CONFIG_PATH": str(tmp_path / "config.json"),
         "PLEX_URL": "http://plex:32400",
         "PLEX_TOKEN": "env-token",
-        "TAG_LABEL_MAP": "niece-ok:kids-allowed",
+        "TAG_LABEL_MAP": "kids:kids-allowed",
     }
     env.update(over)
     for k, v in env.items():

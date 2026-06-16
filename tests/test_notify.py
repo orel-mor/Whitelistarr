@@ -57,5 +57,5 @@ def test_notify_delegates_to_apprise():
             return True
 
     n = Notifier([], apprise_obj=FakeApprise())
-    assert n.notify("Watched", "Sister finished Dune") is True
-    assert calls == [("Watched", "Sister finished Dune")]
+    assert n.notify("Watched", "Family finished Dune") is True
+    assert calls == [("Watched", "Family finished Dune")]
