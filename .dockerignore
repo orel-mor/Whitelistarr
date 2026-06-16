@@ -1,0 +1,25 @@
+# Keep the build context lean — only app/, pyproject.toml, README.md are COPYed.
+.git
+.github
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+.mypy_cache
+tests
+templates
+docs
+data
+*.db
+.env
+.env.*
+!.env.example
+build.sh
+docker-compose.yml
+CHANGELOG.md
+.pre-commit-config.yaml
+.gitattributes
+.editorconfig

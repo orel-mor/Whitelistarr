@@ -1,0 +1,46 @@
+name: Docker
+
+# On PRs that touch the image: build it (validates the Dockerfile) and scan it
+# for known CVEs with Trivy. Single-arch + load (no push).
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "app/**"
+      - "pyproject.toml"
+      - ".github/workflows/docker.yml"
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-scan:
+    name: Build image + Trivy scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image (load, no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: whitelistarr:pr
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: whitelistarr:pr
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"

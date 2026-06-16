@@ -1,0 +1,125 @@
+name: Pre-release
+
+# Push/merge to dev -> python-semantic-release cuts a PRERELEASE (vX.Y.Z-dev.N)
+# and publishes a multi-arch image tagged :dev + :<version>. Docker steps only
+# run when the commits warrant a release (steps.release.outputs.released).
+
+on:
+  push:
+    branches: [dev]
+
+concurrency:
+  group: prerelease-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prerelease:
+    name: Prerelease + publish image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Test (pytest)
+        run: pytest -q
+
+      - name: Python Semantic Release
+        id: release
+        uses: python-semantic-release/python-semantic-release@v10.5.3
+        with:
+          github_token: ${{ secrets.GH_PAT }}
+
+      - name: Set up QEMU
+        if: steps.release.outputs.released == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.release.outputs.released == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        if: steps.release.outputs.released == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to GHCR
+        if: steps.release.outputs.released == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        if: steps.release.outputs.released == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            orelmor/whitelistarr:dev
+            orelmor/whitelistarr:${{ steps.release.outputs.version }}
+            ghcr.io/orel-mor/whitelistarr:dev
+            ghcr.io/orel-mor/whitelistarr:${{ steps.release.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Publish GitHub Release
+        if: steps.release.outputs.released == 'true'
+        uses: python-semantic-release/publish-action@v10.5.3
+        with:
+          github_token: ${{ secrets.GH_PAT }}
+          tag: ${{ steps.release.outputs.tag }}
+
+      - name: Label released PR
+        if: steps.release.outputs.released == 'true'
+        uses: actions/github-script@v9
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const version = process.env.VERSION;
+            async function ensureLabel(name, color, description) {
+              try { await github.rest.issues.getLabel({ owner, repo, name }); }
+              catch (e) { if (e.status === 404) await github.rest.issues.createLabel({ owner, repo, name, color, description }); }
+            }
+            await ensureLabel('dev', 'c5def5', 'Shipped in the dev / prerelease channel (image :dev)');
+            const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner, repo, commit_sha: context.sha });
+            for (const pr of prs) {
+              await github.rest.issues.addLabels({ owner, repo, issue_number: pr.number, labels: ['dev'] });
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body: `🧪 Prereleased in **v${version}** — image \`orelmor/whitelistarr:dev\` + \`:${version}\`.` });
+            }
+
+      - name: Notify (Apprise / Discord)
+        if: steps.release.outputs.released == 'true'
+        continue-on-error: true
+        env:
+          APPRISE_URL: ${{ secrets.APPRISE_NOTIFY_URL }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          if [ -z "$APPRISE_URL" ]; then echo "APPRISE_NOTIFY_URL not set — skipping notification."; exit 0; fi
+          pip install --quiet apprise
+          apprise -t "🧪 Whitelistarr prerelease v$VERSION" \
+                  -b "dev image published: orelmor/whitelistarr:dev and :$VERSION (+ GHCR)." \
+                  "$APPRISE_URL"

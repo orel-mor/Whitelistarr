@@ -1,0 +1,37 @@
+version: 2
+updates:
+  # Python deps (pyproject.toml). PRs target dev so they flow through the
+  # dev -> main release pipeline. Minor/patch grouped to cut PR noise.
+  - package-ecosystem: pip
+    directory: "/"
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: build
+    groups:
+      python-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # GitHub Actions versions used in workflows.
+  - package-ecosystem: github-actions
+    directory: "/"
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci
+    groups:
+      actions-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # The vendored changelog templates (templates/) are coupled to PSR v10.
+      # Don't auto-bump it across a major — review the template by hand first.
+      - dependency-name: "python-semantic-release/python-semantic-release"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "python-semantic-release/publish-action"
+        update-types: ["version-update:semver-major"]

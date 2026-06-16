@@ -1,0 +1,33 @@
+name: Audit
+
+on:
+  pull_request:
+    branches: [main, dev]
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  pip-audit:
+    name: pip-audit
+    runs-on: ubuntu-latest
+    # Advisory for now: reports vulnerable deps without blocking merges.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -e . pip-audit
+      - run: pip-audit
+
+  dependency-review:
+    name: Dependency review
+    # Only works on PRs for public repos (or private with Advanced Security).
+    if: ${{ github.event_name == 'pull_request' && !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/dependency-review-action@v5.0.0

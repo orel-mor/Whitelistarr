@@ -1,0 +1,27 @@
+name: Docker Hub description
+
+# Mirror README.md to the Docker Hub repo's overview on every push to main.
+# Needs DOCKERHUB_USERNAME + DOCKERHUB_TOKEN. If the token lacks permission to
+# edit the description, use an account password or a PAT with public-repo write.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - README.md
+      - .github/workflows/dockerhub-readme.yml
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: peter-evans/dockerhub-description@v5.0.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: orelmor/whitelistarr
+          short-description: "Mirror Sonarr/Radarr tags to Plex labels; Apprise watch/stale notifications"

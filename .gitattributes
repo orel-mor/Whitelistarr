@@ -1,0 +1,10 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Files that MUST stay LF (break otherwise in bash / containers)
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.py text eol=lf
+*.j2 text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

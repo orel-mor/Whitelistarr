@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local config & state
+.env
+*.db
+data/
+
+# Editor
+.idea/
+*.swp
+
+# Local dev / agent artifacts (kept out of the public repo)
+CLAUDE.md
+.claude/
+docs/superpowers/

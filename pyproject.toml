@@ -1,0 +1,84 @@
+[project]
+name = "whitelistarr"
+version = "1.8.0"
+description = "Automatically sync Sonarr/Radarr requester tags to Plex labels and send Apprise notifications for watch milestones."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "python-multipart>=0.0.9",
+    "uvicorn[standard]>=0.30",
+    "PlexAPI>=4.15",
+    "httpx>=0.27",
+    "apprise>=1.8",
+    "apscheduler>=3.10",
+    "pydantic-settings>=2.4",
+    "cryptography>=43.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+whitelistarr = "app.main:run"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+app = ["static/*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# E/F/W (errors), I (import sort), B (bugbear), UP (pyupgrade). E501 off — long
+# lines are fine; B008 off — FastAPI's Depends()/Query() defaults are idiomatic.
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501", "B008"]
+
+# ---------------------------------------------------------------------------
+# python-semantic-release: version is bumped from Conventional Commits in CI.
+#   feat: -> minor   fix: -> patch   feat!: / BREAKING CHANGE -> major
+# Pushes to `dev` cut a prerelease (1.8.0-dev.1); merges to `main` cut a stable
+# release. The bump commit carries [skip ci] so it doesn't re-trigger the run.
+# ---------------------------------------------------------------------------
+[tool.semantic_release]
+tag_format = "v{version}"
+version_toml = ["pyproject.toml:project.version"]
+version_variables = ["app/__init__.py:__version__"]
+build_command = ""
+commit_message = "chore(release): v{version} [skip ci]"
+commit_author = "github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+
+[tool.semantic_release.branches.dev]
+match = "dev"
+prerelease = true
+prerelease_token = "dev"
+
+[tool.semantic_release.changelog]
+# Custom emoji-section template lives in templates/ (vendored from PSR's
+# conventional/md defaults; only changes.md.j2 is edited). "init" mode fully
+# regenerates CHANGELOG.md each release so every entry gets the emoji headings.
+mode = "init"
+template_dir = "templates"
+exclude_commit_patterns = ["^chore\\(release\\):.*"]
