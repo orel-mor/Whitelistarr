@@ -1,21 +1,20 @@
 services:
   whitelistarr:
-    # Maintainer compose: `docker compose build` tags the image as
-    # orelmor/whitelistarr:latest, and `docker compose push` publishes it
-    # to Docker Hub under the orelmor account. (CI publishes the real
-    # multi-arch images; this is for local builds.)
+    # Local build/run compose. `docker compose up --build` builds and runs the
+    # image from source; CI publishes the official multi-arch images. To run a
+    # published image instead, replace `build: .` with the pinned tag.
     image: orelmor/whitelistarr:latest
     build: .
     container_name: whitelistarr
     restart: unless-stopped
-    # Runs unprivileged via PUID/PGID from .env (default 1000:1000). Set them to
-    # your host user if the ./data bind mount has restrictive ownership.
+    # Configuration is read from .env (see .env.example). The container runs
+    # unprivileged via PUID/PGID (default 1000:1000); set them to your host user
+    # if the ./data bind mount has restrictive ownership.
     env_file: .env
     ports:
-      # Exposes the Seerr webhook receiver. Only needed if Seerr reaches this
-      # container by host:port. If both run on the same Docker network you can
-      # drop this and point Seerr at http://whitelistarr:8000.
+      # Webhook receiver and web UI. Drop this if Seerr/Plex reach the container
+      # over a shared Docker network at http://whitelistarr:8000.
       - "8000:8000"
     volumes:
-      # Persists the SQLite notification-dedup state across restarts.
+      # Persists the notification-dedup database and web-UI config.
       - ./data:/data
