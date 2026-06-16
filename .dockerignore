@@ -17,7 +17,6 @@ data
 .env
 .env.*
 !.env.example
-build.sh
 docker-compose.yml
 CHANGELOG.md
 .pre-commit-config.yaml
