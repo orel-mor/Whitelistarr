@@ -24,12 +24,12 @@ pre-commit install
 
 ## Workflow
 
-1. **Branch off `dev`:** `git checkout dev && git pull && git checkout -b feat/short-name`.
+1. **Branch off `main`:** `git checkout main && git pull && git checkout -b feat/short-name`.
 2. **Write a failing test first.** The codebase is test-driven: pure logic gets
    direct unit tests, HTTP clients are tested with `respx` mocks, and Plex is
    tested via a fake video object — tests never hit a live server.
 3. **Implement, then make the suite green.** `pytest` and `ruff check .` must pass.
-4. **Open a pull request into `dev`.** CI runs tests (Python 3.11 + 3.12), lint,
+4. **Open a pull request into `main`.** CI runs tests (Python 3.11 + 3.12), lint,
    CodeQL, a dependency audit, and — when the image changes — a Trivy scan.
 
 Injected dependencies (clients passed into orchestrators) and managed-label
@@ -56,14 +56,17 @@ Do not hand-edit the version in `pyproject.toml` or `app/__init__.py` — CI own
 
 ## Releases
 
-Releases are fully automated:
+The project is **trunk-based**: `main` is the only permanent branch and releases
+are fully automated.
 
-- A merge to **`dev`** cuts a prerelease (`vX.Y.Z-dev.N`) and publishes the image
-  tagged `:dev` and `:X.Y.Z-dev.N`.
-- A merge to **`main`** cuts a stable release with a GitHub Release and changelog,
-  and publishes the image tagged `:latest` and `:X.Y.Z`.
+- Each squash-merge to **`main`** cuts a stable release (GitHub Release +
+  changelog) and publishes the image tagged `:latest` and `:X.Y.Z`.
+- To stage a risky change before release, create a short-lived **`beta`** branch
+  and push to it: it cuts prereleases (`vX.Y.Z-beta.N`) and publishes `:beta`.
+  Open a PR from `beta` into `main`, merge, then delete `beta`.
 
-Promotion path: feature branch → PR into `dev` → PR `dev` into `main`.
+Workflow: feature branch → PR into `main` → squash-merge. No long-lived `dev`
+branch is needed.
 
 ## Reporting issues
 
@@ -75,4 +78,3 @@ Promotion path: feature branch → PR into `dev` → PR `dev` into `main`.
 
 By contributing, you agree that your contributions are licensed under the
 project's [MIT License](LICENSE).
-</content>
