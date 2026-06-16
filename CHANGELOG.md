@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v1.0.1-dev.2 (2026-06-16)
+
+### 🐛 Bug Fixes
+
+- Satisfy CodeQL on the static route and secret logging
+  ([`69a7ceb`](https://github.com/orel-mor/Whitelistarr/commit/69a7ceb09ca0ff71a1c9ba87fc293681c5a7ce04))
+
+
 ## v1.0.1-dev.1 (2026-06-16)
 
 
