@@ -1,3 +1,3 @@
 """Whitelistarr: sync Sonarr/Radarr tags to Plex labels and notify on watch milestones."""
 
-__version__ = "1.8.0"
+__version__ = "1.0.0"
