@@ -5,7 +5,7 @@ name: Docker
 
 on:
   pull_request:
-    branches: [main, dev]
+    branches: [main, beta]
     paths:
       - "Dockerfile"
       - ".dockerignore"

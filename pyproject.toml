@@ -59,8 +59,9 @@ ignore = ["E501", "B008"]
 # ---------------------------------------------------------------------------
 # python-semantic-release: version is bumped from Conventional Commits in CI.
 #   feat: -> minor   fix: -> patch   feat!: / BREAKING CHANGE -> major
-# Pushes to `dev` cut a prerelease (1.8.0-dev.1); merges to `main` cut a stable
-# release. The bump commit carries [skip ci] so it doesn't re-trigger the run.
+# Trunk-based: merges to `main` cut a stable release. The optional, on-demand
+# `beta` branch cuts prereleases (1.2.0-beta.1) for staging. The bump commit
+# carries [skip ci] so it doesn't re-trigger the run.
 # ---------------------------------------------------------------------------
 [tool.semantic_release]
 tag_format = "v{version}"
@@ -74,10 +75,10 @@ commit_author = "github-actions[bot] <github-actions[bot]@users.noreply.github.c
 match = "main"
 prerelease = false
 
-[tool.semantic_release.branches.dev]
-match = "dev"
+[tool.semantic_release.branches.beta]
+match = "beta"
 prerelease = true
-prerelease_token = "dev"
+prerelease_token = "beta"
 
 [tool.semantic_release.changelog]
 # Custom emoji-section template lives in templates/ (vendored from PSR's

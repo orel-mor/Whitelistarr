@@ -309,16 +309,18 @@ conventions, and release process.
 
 ## Releases and CI
 
-Releases are automated with
+The project is **trunk-based**: `main` is the single permanent branch, and
+releases are automated with
 [python-semantic-release](https://python-semantic-release.readthedocs.io/), driven
 by [Conventional Commits](https://www.conventionalcommits.org/):
 
-- A push or merge to **`dev`** cuts a prerelease (`vX.Y.Z-dev.N`) and publishes a
-  multi-arch image tagged `:dev` and `:X.Y.Z-dev.N`.
-- A merge to **`main`** cuts a stable release with a GitHub Release and changelog,
-  and publishes an image tagged `:latest` and `:X.Y.Z`.
+- A squash-merge to **`main`** cuts a stable release with a GitHub Release and
+  changelog, and publishes a multi-arch image tagged `:latest` and `:X.Y.Z`.
 - Commit type drives the version bump: `feat:` → minor, `fix:` → patch, `feat!:`
   or `BREAKING CHANGE:` → major. `docs:` / `chore:` / `test:` produce no release.
+- To stage a risky change first, push an on-demand **`beta`** branch: it cuts
+  prereleases (`vX.Y.Z-beta.N`) and publishes `:beta`. Merge it into `main` and
+  delete it when done.
 - Image builds run only when the commits warrant a release.
 
 Pull requests additionally run tests, lint, CodeQL analysis, a dependency audit,
@@ -336,5 +338,3 @@ full pipeline.
 ## License
 
 [MIT](LICENSE)
-</content>
-</invoke>
