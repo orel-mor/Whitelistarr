@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v1.0.1-dev.1 (2026-06-16)
+
+
+## v1.0.0 (2026-06-16)
+
+### ♻️ Refactoring
+
+- Rename secret loop variable to clear false-positive alert
+  ([`d5346fe`](https://github.com/orel-mor/Whitelistarr/commit/d5346fe33c921643f44b9db851c26b97b50af581))
+
+
 ## v1.0.0-dev.2 (2026-06-16)
 
 ### 🐛 Bug Fixes
