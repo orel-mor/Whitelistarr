@@ -43,27 +43,31 @@ class ConfigStore:
     def load(self) -> dict[str, Any]:
         """Return the stored config with secret fields decrypted to plaintext."""
         data = self._read_raw()
-        for key in self._secret_keys:
-            token = data.get(key)
+        for field in self._secret_keys:
+            token = data.get(field)
             if not token:
                 continue
             try:
-                data[key] = self._fernet.decrypt(token.encode()).decode()
+                data[field] = self._fernet.decrypt(token.encode()).decode()
             except (InvalidToken, AttributeError):
-                log.warning("Could not decrypt %s (wrong PAL_SECRET_KEY?); treating as unset", key)
-                data[key] = ""
+                # Don't log the field name: it's iterated from the secret-field
+                # set, so static analysis flags it as logging secret data. A
+                # decrypt failure almost always means PAL_SECRET_KEY changed for
+                # every secret anyway, so the generic message is enough.
+                log.warning("Could not decrypt a stored secret (wrong PAL_SECRET_KEY?); treating as unset")
+                data[field] = ""
         return data
 
     def save(self, values: dict[str, Any]) -> None:
         """Merge ``values`` into the store, encrypting secret fields, atomically."""
         merged = self.load()  # decrypted current state, so secrets aren't double-encrypted
         merged.update(values)
-        for key in self._secret_keys:
-            plain = merged.get(key)
+        for field in self._secret_keys:
+            plain = merged.get(field)
             if plain:
-                merged[key] = self._fernet.encrypt(str(plain).encode()).decode()
-            elif key in merged:
-                merged[key] = ""  # keep empty secrets empty (not encrypted)
+                merged[field] = self._fernet.encrypt(str(plain).encode()).decode()
+            elif field in merged:
+                merged[field] = ""  # keep empty secrets empty (not encrypted)
 
         parent = os.path.dirname(self._path)
         if parent:

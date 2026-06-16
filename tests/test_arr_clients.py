@@ -12,7 +12,7 @@ SONARR = "http://sonarr:8989"
 def test_radarr_iter_all_with_tags():
     respx.get(f"{RADARR}/api/v3/tag").mock(
         return_value=httpx.Response(
-            200, json=[{"id": 1, "label": "niece-ok"}, {"id": 2, "label": "sister"}]
+            200, json=[{"id": 1, "label": "kids"}, {"id": 2, "label": "family"}]
         )
     )
     respx.get(f"{RADARR}/api/v3/movie").mock(
@@ -25,7 +25,7 @@ def test_radarr_iter_all_with_tags():
         )
     )
     items = list(RadarrClient(RADARR, "k").iter_all_with_tags())
-    assert items[0] == ({"tmdb:603", "imdb:tt0133093"}, ["niece-ok"])
+    assert items[0] == ({"tmdb:603", "imdb:tt0133093"}, ["kids"])
     assert items[1] == ({"tmdb:604"}, [])
 
 
@@ -41,7 +41,7 @@ def test_radarr_sends_api_key_header():
 def test_sonarr_iter_all_with_tags_includes_tmdb_and_tvdb():
     respx.get(f"{SONARR}/api/v3/tag").mock(
         return_value=httpx.Response(
-            200, json=[{"id": 1, "label": "niece-ok"}, {"id": 2, "label": "sister"}]
+            200, json=[{"id": 1, "label": "kids"}, {"id": 2, "label": "family"}]
         )
     )
     respx.get(f"{SONARR}/api/v3/series").mock(
@@ -53,13 +53,13 @@ def test_sonarr_iter_all_with_tags_includes_tmdb_and_tvdb():
         )
     )
     items = list(SonarrClient(SONARR, "k").iter_all_with_tags())
-    assert items[0] == ({"tvdb:121361", "tmdb:2316", "imdb:tt0098904"}, ["sister"])
+    assert items[0] == ({"tvdb:121361", "tmdb:2316", "imdb:tt0098904"}, ["family"])
 
 
 @respx.mock
 def test_unknown_tag_id_is_skipped():
     respx.get(f"{RADARR}/api/v3/tag").mock(
-        return_value=httpx.Response(200, json=[{"id": 1, "label": "niece-ok"}])
+        return_value=httpx.Response(200, json=[{"id": 1, "label": "kids"}])
     )
     respx.get(f"{RADARR}/api/v3/movie").mock(
         return_value=httpx.Response(200, json=[{"id": 1, "tmdbId": 1, "tags": [99]}])

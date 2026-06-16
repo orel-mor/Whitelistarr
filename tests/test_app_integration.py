@@ -41,7 +41,7 @@ def test_save_config_via_api_persists(monkeypatch, tmp_path):
         resp = client.post("/api/config", json={
             "plex_url": "http://plex:32400",
             "plex_token": "tok",
-            "tag_label_map": "niece-ok:kids",
+            "tag_label_map": "kids:kids",
         })
         assert resp.status_code == 200
         assert resp.json()["restart_required"] is True

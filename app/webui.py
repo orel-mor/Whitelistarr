@@ -23,6 +23,20 @@ log = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).parent / "static"
 _MEDIA = {".html": "text/html", ".js": "text/javascript", ".css": "text/css"}
 
+# The web UI ships exactly these static assets. Map each name to a pre-built,
+# constant path so a request only ever looks one up by key — the user-provided
+# name never enters a filesystem path expression, so it can't traverse out of
+# STATIC_DIR or read arbitrary files.
+_STATIC_FILES = {name: STATIC_DIR / name for name in ("index.html", "app.js", "style.css")}
+
+
+def _static_response(name: str) -> Response:
+    """Serve a packaged static file by name from the fixed allowlist."""
+    path = _STATIC_FILES.get(name)
+    if path is None or not path.is_file():
+        return Response(status_code=404)
+    return FileResponse(path, media_type=_MEDIA.get(path.suffix, "text/plain"))
+
 
 def create_webui_router(
     settings: Settings,
@@ -35,19 +49,13 @@ def create_webui_router(
     keys = set(field_keys())
     secrets = set(secret_keys())
 
-    def _static(name: str) -> Response:
-        path = STATIC_DIR / name
-        if not path.exists():
-            return Response(status_code=404)
-        return FileResponse(path, media_type=_MEDIA.get(path.suffix, "text/plain"))
-
     @router.get("/")
     async def index() -> Response:
-        return _static("index.html")
+        return _static_response("index.html")
 
     @router.get("/static/{name}")
     async def static_file(name: str) -> Response:
-        return _static(name)
+        return _static_response(name)
 
     @router.get("/api/schema")
     async def schema() -> dict:

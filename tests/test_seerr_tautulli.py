@@ -18,7 +18,7 @@ def test_seerr_iter_requests_normalizes_fields():
         {
             "type": "movie",
             "media": {"tmdbId": 603, "tvdbId": None, "mediaType": "movie", "ratingKey": "111"},
-            "requestedBy": {"plexUsername": "sister", "displayName": "Sister"},
+            "requestedBy": {"plexUsername": "family", "displayName": "Family"},
         }
     ]
     respx.get(f"{SEERR}/api/v1/request").mock(
@@ -29,7 +29,7 @@ def test_seerr_iter_requests_normalizes_fields():
     r = reqs[0]
     assert r.media_type == "movie"
     assert r.tmdb_id == 603
-    assert r.requester == "sister"
+    assert r.requester == "family"
     assert r.rating_key == "111"
 
 
@@ -68,13 +68,13 @@ def test_tautulli_get_history_returns_rows():
             json={
                 "response": {
                     "result": "success",
-                    "data": {"data": [{"rating_key": "111", "user": "sister", "percent_complete": 100}]},
+                    "data": {"data": [{"rating_key": "111", "user": "family", "percent_complete": 100}]},
                 }
             },
         )
     )
-    rows = TautulliClient(TAUTULLI, "key").get_history(rating_key="111", user="sister")
-    assert rows == [{"rating_key": "111", "user": "sister", "percent_complete": 100}]
+    rows = TautulliClient(TAUTULLI, "key").get_history(rating_key="111", user="family")
+    assert rows == [{"rating_key": "111", "user": "family", "percent_complete": 100}]
 
 
 @respx.mock

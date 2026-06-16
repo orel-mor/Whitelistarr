@@ -23,6 +23,7 @@ data/
 
 # Editor
 .idea/
+.vscode/
 *.swp
 
 # Local dev / agent artifacts (kept out of the public repo)

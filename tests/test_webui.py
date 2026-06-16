@@ -102,3 +102,32 @@ def test_action_test_notification(tmp_path):
     assert resp.status_code == 200
     assert resp.json()["ok"] is True
     assert sent == [1]
+
+
+def test_static_serves_packaged_files(tmp_path):
+    client, _ = _client(tmp_path)
+    for name in ("index.html", "app.js", "style.css"):
+        assert client.get(f"/static/{name}").status_code == 200
+
+
+def test_static_rejects_traversal(tmp_path):
+    # Names that resolve outside the static dir, or to a non-file, must 404 —
+    # never serve arbitrary files from the package/filesystem. Encoded separators
+    # are the server-reachable form (a plain `..` is normalized away by the client).
+    client, _ = _client(tmp_path)
+    for name in (
+        "does-not-exist.js",
+        "%2e%2e%2fconfig.py",
+        "%2e%2e%2f%2e%2e%2fpyproject.toml",
+    ):
+        assert client.get(f"/static/{name}").status_code == 404
+
+
+def test_static_confines_to_static_dir(tmp_path):
+    # Directly exercise the confinement: a sibling package file (config.py lives in
+    # app/, one level above app/static/) must not be served.
+    from app.webui import _static_response
+
+    assert _static_response("..").status_code == 404
+    assert _static_response("../config.py").status_code == 404
+    assert _static_response("index.html").status_code == 200
