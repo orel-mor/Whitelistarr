@@ -252,5 +252,36 @@ document.addEventListener("alpine:init", () => {
     },
   }));
 
+  Alpine.data("plexSignIn", () => ({
+    phase: "idle", pinId: null, servers: [], chosen: null, error: "", authUrl: "",
+    async start() {
+      this.error = ""; this.phase = "pending"; this.authUrl = "";
+      const r = await apiPost("/api/plex/pin");
+      if (!r.ok) { this.phase = "idle"; this.error = "Could not start sign-in"; return; }
+      this.pinId = r.body.id;
+      const win = window.open(r.body.authUrl, "plex", "width=600,height=720");
+      if (!win) this.authUrl = r.body.authUrl;   // popup blocked -> show link
+      this.poll();
+    },
+    async poll() {
+      const r = await api(`/api/plex/pin/${this.pinId}`);
+      if (r.body && r.body.authorized) { await this.loadServers(); return; }
+      setTimeout(() => this.poll(), 2000);
+    },
+    async loadServers() {
+      const r = await api(`/api/plex/servers?pin_id=${this.pinId}`);
+      this.servers = (r.body && r.body.servers) || [];
+      this.phase = "pick";
+    },
+    async apply(uri) {
+      const r = await apiPost("/api/plex/apply", { pin_id: this.pinId, uri });
+      if (r.ok && r.body.ok !== false) {
+        this.phase = "done"; this.chosen = uri; this.$dispatch("plex-connected");
+      } else {
+        this.error = (r.body && r.body.error) || "Apply failed";
+      }
+    },
+  }));
+
   Alpine.data("wizard", () => ({}));
 });

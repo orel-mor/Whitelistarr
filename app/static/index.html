@@ -94,6 +94,41 @@
               <input type="checkbox" x-model="showAdvanced" /> Show advanced
             </label>
           </header>
+          <div class="group" x-data="plexSignIn()">
+            <h2>Plex sign-in</h2>
+            <template x-if="phase==='idle'">
+              <button class="btn primary" @click="start()">Sign in with Plex</button>
+            </template>
+            <template x-if="phase==='pending'">
+              <div>
+                <p class="muted">Waiting for authorization in the popup…</p>
+                <template x-if="authUrl">
+                  <a :href="authUrl" target="_blank" class="btn small">Popup blocked? Open Plex sign-in</a>
+                </template>
+              </div>
+            </template>
+            <template x-if="phase==='pick'">
+              <div>
+                <p class="muted">Choose your server:</p>
+                <template x-for="s in servers" :key="s.clientIdentifier">
+                  <div class="server-pick">
+                    <strong x-text="s.name"></strong>
+                    <template x-for="conn in s.connections" :key="conn.uri">
+                      <button class="btn small" @click="apply(conn.uri)">
+                        <span x-text="conn.uri"></span>
+                        <span class="muted" x-text="conn.local ? ' (local)' : ' (remote)'"></span>
+                      </button>
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template x-if="phase==='done'">
+              <p class="pill ok">Connected — <span x-text="chosen"></span></p>
+            </template>
+            <p class="errors" x-show="error" x-text="error"></p>
+          </div>
+
           <div x-ref="core" class="groups"></div>
           <div x-ref="adv" class="groups" x-show="showAdvanced"></div>
           <div class="savebar">
