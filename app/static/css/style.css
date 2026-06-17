@@ -122,6 +122,21 @@ input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); bo
 .pill.warn::before { background: var(--accent); }
 .pill.err::before { background: var(--danger); }
 
+/* ---- wizard ------------------------------------------------------------- */
+#wizard { max-width: 620px; margin: 0 auto; padding: 48px 24px; }
+.wizard-progress { display: flex; gap: 8px; justify-content: center; margin-bottom: 28px; flex-wrap: wrap; }
+.step-dot {
+  font-size: 12px; color: var(--muted); padding: 5px 12px; border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.step-dot.active { color: var(--accent); border-color: var(--accent); }
+.step-dot.done { color: var(--ok); border-color: var(--ok); }
+.wizard-panel { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 28px; }
+.wizard-panel h1 { font-size: 22px; margin: 0 0 10px; }
+.wizard-nav { display: flex; gap: 10px; margin-top: 22px; }
+.server-pick { border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-top: 10px; }
+.server-pick .btn { display: block; width: 100%; text-align: left; margin-top: 6px; }
+
 /* ---- responsive --------------------------------------------------------- */
 @media (max-width: 720px) {
   .app { flex-direction: column; }

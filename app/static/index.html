@@ -14,8 +14,106 @@
 <body x-data x-init="$store.app.init()">
   <template x-if="$store.app.route === 'setup'">
     <main id="wizard" x-data="wizard()">
-      <h1>Setup</h1>
-      <p class="muted">Wizard loads here.</p>
+      <div class="wizard">
+        <div class="wizard-progress">
+          <template x-for="(s, i) in steps" :key="i">
+            <span class="step-dot" :class="{active: step===i, done: step>i}" x-text="s"></span>
+          </template>
+        </div>
+
+        <div class="wizard-panel" x-show="step===0">
+          <h1>Welcome to Whitelistarr</h1>
+          <p class="muted">Mirror your Sonarr/Radarr tags to Plex labels so a restricted share
+            stays whitelisted automatically. Let's connect your services.</p>
+          <button class="btn primary" @click="next()">Get started</button>
+        </div>
+
+        <div class="wizard-panel" x-show="step===1" @plex-connected="next()">
+          <h1>Connect Plex</h1>
+          <div x-data="plexSignIn()">
+            <template x-if="phase==='idle'">
+              <button class="btn primary" @click="start()">Sign in with Plex</button>
+            </template>
+            <template x-if="phase==='pending'">
+              <div>
+                <p class="muted">Waiting for authorization in the popup…</p>
+                <template x-if="authUrl">
+                  <a :href="authUrl" target="_blank" class="btn small">Popup blocked? Open Plex sign-in</a>
+                </template>
+              </div>
+            </template>
+            <template x-if="phase==='pick'">
+              <div>
+                <p class="muted">Choose your server:</p>
+                <template x-for="s in servers" :key="s.clientIdentifier">
+                  <div class="server-pick">
+                    <strong x-text="s.name"></strong>
+                    <template x-for="conn in s.connections" :key="conn.uri">
+                      <button class="btn small" @click="apply(conn.uri)">
+                        <span x-text="conn.uri"></span>
+                        <span class="muted" x-text="conn.local ? ' (local)' : ' (remote)'"></span>
+                      </button>
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template x-if="phase==='done'">
+              <p class="pill ok">Connected — <span x-text="chosen"></span></p>
+            </template>
+            <p class="errors" x-show="error" x-text="error"></p>
+          </div>
+          <div class="wizard-nav">
+            <button class="btn" @click="back()">Back</button>
+          </div>
+        </div>
+
+        <div class="wizard-panel" x-show="step===2">
+          <h1>Radarr &amp; Sonarr</h1>
+          <div class="group">
+            <h2>Radarr</h2>
+            <div class="field"><label>URL</label><input type="text" x-model="radarr.url" placeholder="http://radarr:7878" /></div>
+            <div class="field"><label>API key</label><input type="password" x-model="radarr.key" /></div>
+            <button class="btn small" @click="saveArr('radarr')">Test connection</button>
+            <span class="pill" :class="radarr.ok===null ? '' : (radarr.ok ? 'ok' : 'err')"
+                  x-text="radarr.ok===null ? '' : (radarr.ok ? 'connected' : 'failed')"></span>
+          </div>
+          <div class="group">
+            <h2>Sonarr</h2>
+            <div class="field"><label>URL</label><input type="text" x-model="sonarr.url" placeholder="http://sonarr:8989" /></div>
+            <div class="field"><label>API key</label><input type="password" x-model="sonarr.key" /></div>
+            <button class="btn small" @click="saveArr('sonarr')">Test connection</button>
+            <span class="pill" :class="sonarr.ok===null ? '' : (sonarr.ok ? 'ok' : 'err')"
+                  x-text="sonarr.ok===null ? '' : (sonarr.ok ? 'connected' : 'failed')"></span>
+          </div>
+          <div class="wizard-nav">
+            <button class="btn" @click="back()">Back</button>
+            <button class="btn" @click="next()">Skip for now</button>
+            <button class="btn primary" @click="next()" :disabled="!canLeaveArr()">Next</button>
+          </div>
+        </div>
+
+        <div class="wizard-panel" x-show="step===3">
+          <h1>Tag → label map</h1>
+          <p class="muted">Which *arr tag grants which Plex label. Comma-separated
+            <code>tag:label</code> pairs.</p>
+          <div class="field">
+            <input type="text" x-model="tagMap" placeholder="kids:kids-allowed,family:shared" />
+          </div>
+          <div class="wizard-nav">
+            <button class="btn" @click="back()">Back</button>
+            <button class="btn primary" @click="saveTags()">Next</button>
+          </div>
+        </div>
+
+        <div class="wizard-panel" x-show="step===4">
+          <h1>All set</h1>
+          <p class="muted">Your services are connected and Whitelistarr will keep Plex labels in
+            sync. Last step (in Plex): restrict your shared user to the label under
+            Settings → Users &amp; Sharing → Restrictions.</p>
+          <button class="btn primary" @click="finish()">Go to Status</button>
+        </div>
+      </div>
     </main>
   </template>
 

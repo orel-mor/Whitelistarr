@@ -283,5 +283,25 @@ document.addEventListener("alpine:init", () => {
     },
   }));
 
-  Alpine.data("wizard", () => ({}));
+  Alpine.data("wizard", () => ({
+    step: 0, last: 4, steps: ["Welcome", "Plex", "Radarr & Sonarr", "Tags", "Done"],
+    radarr: { url: "", key: "", ok: null }, sonarr: { url: "", key: "", ok: null },
+    tagMap: "",
+    next() { if (this.step < this.last) this.step++; },
+    back() { if (this.step > 0) this.step--; },
+    async saveArr(which) {
+      const f = this[which];
+      await apiPost("/api/config", { [`${which}_url`]: f.url, [`${which}_api_key`]: f.key });
+      const r = await apiPost(`/api/connections/test/${which}`);
+      f.ok = !!(r.body && r.body.ok);
+      this.$store.app.toast(`${which}: ${f.ok ? "connected ✓" : "failed ✗"}`, f.ok ? "ok" : "err");
+    },
+    canLeaveArr() { return this.radarr.ok || this.sonarr.ok; },
+    async saveTags() {
+      if (!this.tagMap.trim()) { this.$store.app.toast("Add at least one tag → label", "warn"); return; }
+      await apiPost("/api/config", { tag_label_map: this.tagMap.trim() });
+      this.next();
+    },
+    finish() { location.hash = "#/status"; this.$store.app.route = "status"; },
+  }));
 });
