@@ -136,7 +136,7 @@ class Settings(BaseSettings):
     config_path: str = "/data/config.json"
 
     @model_validator(mode="after")
-    def _migrate_legacy_intervals(self) -> "Settings":
+    def _migrate_legacy_intervals(self) -> Settings:
         if "sweep_cron" not in self.model_fields_set and self.sweep_interval_minutes is not None:
             self.sweep_cron = minutes_to_cron(self.sweep_interval_minutes)
         if (

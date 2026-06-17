@@ -236,11 +236,11 @@ def run() -> None:
 
     configured = not settings.runtime_errors()
     log.info(
-        "Config: ui=%s webhook=%s sweep=%s(%dm) notify=%s mode=%s labels=%s configured=%s",
+        "Config: ui=%s webhook=%s sweep=%s(%s) notify=%s mode=%s labels=%s configured=%s",
         ui_enabled,
         settings.feature_webhook,
         settings.feature_sweep,
-        settings.sweep_interval_minutes,
+        settings.sweep_cron,
         settings.feature_notify,
         settings.label_removal,
         sorted(settings.managed_labels),

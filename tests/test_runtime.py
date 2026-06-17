@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.runtime import BOOTSTRAP_FIELDS, ReloadResult, Runtime
+from app.runtime import BOOTSTRAP_FIELDS, Runtime
 
 
 class FakeScheduler:
