@@ -125,6 +125,8 @@ class TestSettings:
         assert s.dry_run is False
         assert s.sweep_cron == "0 * * * *"
         assert s.watched_percent == 85
+        assert s.feature_reactive is True
+        assert s.reactive_interval_seconds == 60
 
     def test_notify_test_on_start_removed(self, monkeypatch):
         for k, v in _base_env().items():

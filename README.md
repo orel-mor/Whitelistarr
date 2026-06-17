@@ -58,13 +58,19 @@ Seerr request ──► Radarr / Sonarr (requester tag)
               Tautulli watch history ──► Apprise notifications
 ```
 
-1. **Event-driven labeling.** A Seerr *Media Available* webhook (or a Plex
-   *library.new* webhook) fires when an item lands on Plex. Whitelistarr reads the
-   title's tags from Radarr/Sonarr, maps them to Plex labels, finds the Plex item
-   by GUID, and reconciles its labels.
-2. **Reconcile sweep.** On a schedule it re-syncs every item in the configured
-   Plex sections, catching manual tag edits, missed webhooks, and removals.
-3. **Watch / stale notifications.** On a schedule it cross-references Seerr
+1. **Reactive poll (default on).** Every `REACTIVE_INTERVAL_SECONDS` (60 by
+   default) Whitelistarr does two cheap checks: it diffs the Radarr/Sonarr tag
+   index to react to tag changes on existing titles within seconds, and it labels
+   Plex *recently-added* items. This needs **no manual Plex webhook** (Plex
+   webhooks require Plex Pass) — it's the zero-config path for both new media and
+   tag edits.
+2. **Event-driven labeling (optional).** A Seerr *Media Available* webhook (or a
+   Plex *library.new* webhook) can also fire when an item lands on Plex.
+   Whitelistarr reads the title's tags from Radarr/Sonarr, maps them to Plex
+   labels, finds the Plex item by GUID, and reconciles its labels.
+3. **Reconcile sweep.** On a schedule it re-syncs every item in the configured
+   Plex sections — the safety net catching anything the reactive poll missed.
+4. **Watch / stale notifications.** On a schedule it cross-references Seerr
    requests with Tautulli history and notifies via Apprise. It never writes back
    to Radarr/Sonarr — notifications only.
 
@@ -138,21 +144,28 @@ Seerr at `http://whitelistarr:8000` instead of the host.
 
 ## Triggering immediate labeling
 
-Only one trigger is required — the periodic sweep is always a safety net. Choose
-whichever fits your setup:
+Nothing to configure by default: the **reactive poll** (`FEATURE_REACTIVE=true`)
+reacts to both new media and tag changes within `REACTIVE_INTERVAL_SECONDS`, and
+the periodic sweep is the safety net. The webhook options below are optional —
+use them only if you want push-instant (sub-second) labeling.
 
-### Option A — Plex webhook (recommended; no Seerr config)
+### Option A — reactive poll (default; no webhook, no Plex Pass)
 
-Plex fires `library.new` the instant it adds an item, making it the most accurate
-"on addition" trigger. It also labels **manually added** content, not just Seerr
-requests. Requires Plex Pass (server owner).
+On by default. Every 60 seconds Whitelistarr labels Plex recently-added items and
+diffs the Radarr/Sonarr tag index to react to tag edits — including **manually
+added** content, not just Seerr requests. Lower `REACTIVE_INTERVAL_SECONDS` for a
+snappier reaction. This is the recommended path; the webhooks below are only
+needed for sub-second latency.
 
-In **Plex → Settings → Webhooks → Add Webhook**, set the URL to
-`http://whitelistarr:8000/webhook/plex` (or
+### Option B — Plex webhook (push; requires Plex Pass)
+
+Plex fires `library.new` the instant it adds an item. Requires Plex Pass (server
+owner) and manual setup. In **Plex → Settings → Webhooks → Add Webhook**, set the
+URL to `http://whitelistarr:8000/webhook/plex` (or
 `http://<docker-host>:8000/webhook/plex`). If you set `WEBHOOK_SECRET`, append
 `?token=YOUR_SECRET`.
 
-### Option B — Seerr webhook
+### Option C — Seerr webhook
 
 In **Seerr → Settings → Notifications → Webhook**:
 
@@ -163,12 +176,6 @@ In **Seerr → Settings → Notifications → Webhook**:
 - Keep the default JSON payload — the app reads `media.media_type`, `media.tmdbId`
   and `media.tvdbId`.
 - Click **Test** (test pings are accepted and ignored), then **Save**.
-
-### Option C — no webhook
-
-Leave `FEATURE_SWEEP=true` and set a tighter `SWEEP_CRON` (for example
-`*/5 * * * *`, every 5 minutes). The reconcile sweep then picks up new items
-within that window — simplest to operate, at the cost of a little latency.
 
 ## Restricting a shared user to the label
 
@@ -282,6 +289,8 @@ declarative deploy) or in the web UI, where they apply live.
 | `RADARR_URL` / `RADARR_API_KEY` | — | Radarr connection |
 | `SONARR_URL` / `SONARR_API_KEY` | — | Sonarr connection |
 | `TAG_LABEL_MAP` | — | `tag:label,tag:label` — which \*arr tags become which Plex labels |
+| `FEATURE_REACTIVE` | `true` | Fast poll: react to arr tag changes + Plex recently-added (no Plex webhook needed) |
+| `REACTIVE_INTERVAL_SECONDS` | `60` | How often the reactive poll runs |
 | `SWEEP_CRON` | `0 * * * *` | Sweep schedule (5-field cron); hourly by default |
 | `WATCH_SCAN_CRON` | `0 3 * * *` | Watch-history scan schedule (cron); daily 3am |
 | `FEATURE_NOTIFY` | `false` | Enable watched/stale notifications |

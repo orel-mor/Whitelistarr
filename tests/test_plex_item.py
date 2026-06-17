@@ -1,4 +1,6 @@
-from app.clients.plex import PlexItem, configure_plex_identity
+from datetime import datetime, timedelta
+
+from app.clients.plex import PlexClient, PlexItem, configure_plex_identity
 
 
 def test_configure_plex_identity_sets_headers():
@@ -76,3 +78,51 @@ def test_rating_key_is_string():
     item = PlexItem(v, "show")
     assert item.rating_key == "987"
     assert item.tvdb_id == 12345
+
+
+class FakeAddedVideo(FakeVideo):
+    def __init__(self, title, added_at, rating_key=1):
+        super().__init__(title, ["tmdb://1"], [], rating_key=rating_key)
+        self.addedAt = added_at
+
+
+class FakeSection:
+    def __init__(self, type_, title, videos):
+        self.type = type_
+        self.title = title
+        self._videos = videos
+
+    def search(self, sort=None, maxresults=None):
+        ordered = sorted(self._videos, key=lambda v: v.addedAt, reverse=True)
+        return ordered[:maxresults] if maxresults else ordered
+
+
+class FakeServer:
+    def __init__(self, sections):
+        self.library = type("Lib", (), {"sections": lambda self: sections})()
+
+
+def _client_with(sections):
+    client = object.__new__(PlexClient)
+    client._server = FakeServer(sections)
+    client._section_filter = set()
+    return client
+
+
+def test_recently_added_returns_items_newer_than_watermark():
+    t0 = datetime(2026, 1, 1)
+    section = FakeSection("movie", "Movies", [
+        FakeAddedVideo("New", t0 + timedelta(hours=2), rating_key=2),
+        FakeAddedVideo("Old", t0 - timedelta(hours=2), rating_key=1),
+    ])
+    items = _client_with([section]).recently_added(since=t0)
+    assert [i.title for i in items] == ["New"]
+
+
+def test_recently_added_none_since_returns_all():
+    section = FakeSection("movie", "Movies", [
+        FakeAddedVideo("A", datetime(2026, 1, 2)),
+        FakeAddedVideo("B", datetime(2026, 1, 1)),
+    ])
+    items = _client_with([section]).recently_added(since=None)
+    assert {i.title for i in items} == {"A", "B"}

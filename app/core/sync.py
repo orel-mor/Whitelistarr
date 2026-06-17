@@ -172,7 +172,16 @@ class LabelSync:
         return self._sync_single(item)
 
     def _sync_single(self, item: Any) -> bool:
-        changed, to_add, to_remove = self._reconcile_item(item, self._get_index(force=True))
+        return self.reconcile_found(item, self._get_index(force=True))
+
+    def reconcile_found(self, item: Any, index: dict[str, set[str]]) -> bool:
+        """Reconcile one already-resolved Plex item against a prebuilt index.
+
+        Applies label changes and emits label-added/removed notifications, just
+        like the webhook path, but takes the GUID->tags index as an argument so
+        callers (the reactive poller) can reuse one index across many items.
+        """
+        changed, to_add, to_remove = self._reconcile_item(item, index)
         added: dict[str, dict[str, list[str]]] = {}
         removed: dict[str, dict[str, list[str]]] = {}
         self._collect_label_changes(item, to_add, to_remove, added, removed)

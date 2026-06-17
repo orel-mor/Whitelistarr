@@ -45,6 +45,7 @@ def build_components(settings: Settings, tracker: Any | None = None) -> Componen
     from app.clients.seerr import SeerrClient
     from app.clients.sonarr import SonarrClient
     from app.clients.tautulli import TautulliClient
+    from app.core.reactive import ReactivePoller
     from app.core.sync import LabelSync
     from app.core.watch_monitor import WatchMonitor
     from app.state import StateStore
@@ -113,14 +114,20 @@ def build_components(settings: Settings, tracker: Any | None = None) -> Componen
             unwatched_after_days=settings.unwatched_after_days,
         )
 
+    reactive = ReactivePoller(plex=plex, label_sync=label_sync, radarr=radarr, sonarr=sonarr)
+
     sweep_fn = label_sync.sweep
     watch_fn = watch_monitor.scan if watch_monitor else (lambda: None)
+    reactive_fn = reactive.poll
     if tracker is not None:
         sweep_fn = tracker.wrap("sweep", sweep_fn)
+        reactive_fn = tracker.wrap("reactive", reactive_fn)
         if watch_monitor is not None:
             watch_fn = tracker.wrap("watch_scan", watch_fn)
 
-    scheduler = build_scheduler(settings, sweep_fn=sweep_fn, watch_fn=watch_fn)
+    scheduler = build_scheduler(
+        settings, sweep_fn=sweep_fn, watch_fn=watch_fn, reactive_fn=reactive_fn
+    )
     return Components(
         settings, label_sync, watch_monitor, scheduler,
         plex=plex, radarr=radarr, sonarr=sonarr, seerr=seerr, tautulli=tautulli,
