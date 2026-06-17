@@ -81,7 +81,7 @@ class Settings(BaseSettings):
     # How this app identifies itself to Plex (Settings > Devices). A stable
     # client id keeps Plex from registering a new device on each restart.
     plex_device_name: str = "Whitelistarr"
-    plex_client_id: str = "whitelistarr"
+    plex_client_id: str = ""  # generated + persisted on first run (UI mode)
 
     radarr_url: str = ""
     radarr_api_key: str = ""
@@ -115,7 +115,6 @@ class Settings(BaseSettings):
     # --- Notifications ---
     apprise_urls: str = ""  # CSV of apprise URLs
     notify_on: str = "watched,stale"  # CSV of event types
-    notify_test_on_start: bool = False  # send one test notification at startup
     watched_percent: int = 85
     stale_after_days: int = 180
     unwatched_after_days: int = 90
@@ -234,10 +233,16 @@ def load_settings(store: object | None = None) -> Settings:
             return base
 
     if store.exists():
-        return Settings(**store.load())
+        settings = Settings(**store.load())
+    else:
+        store.save(_dump_for_store(base))
+        settings = base
 
-    store.save(_dump_for_store(base))
-    return base
+    if not settings.plex_client_id:
+        generated = uuid.uuid4().hex
+        store.save({"plex_client_id": generated})
+        settings = Settings(**store.load())
+    return settings
 
 
 _settings: Settings | None = None

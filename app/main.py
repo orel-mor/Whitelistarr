@@ -252,9 +252,6 @@ def run() -> None:
     if settings.dry_run:
         log.warning("DRY_RUN enabled: no Plex labels or notifications will be applied.")
 
-    if configured and settings.feature_notify and settings.notify_test_on_start:
-        _send_test_notification(settings)
-
     # Serve HTTP if the UI or the webhook receiver is on; otherwise run headless.
     if ui_enabled or settings.feature_webhook:
         import uvicorn

@@ -126,6 +126,11 @@ class TestSettings:
         assert s.sweep_cron == "0 * * * *"
         assert s.watched_percent == 85
 
+    def test_notify_test_on_start_removed(self, monkeypatch):
+        for k, v in _base_env().items():
+            monkeypatch.setenv(k, v)
+        assert not hasattr(Settings(), "notify_test_on_start")
+
     def test_notify_requires_tautulli(self, monkeypatch):
         env = _base_env(FEATURE_NOTIFY="true", APPRISE_URLS="json://x")
         for k, v in env.items():

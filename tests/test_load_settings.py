@@ -48,6 +48,25 @@ def test_ui_off_uses_env_only_no_store(monkeypatch, tmp_path):
     assert not (tmp_path / "config.json").exists()  # no store written
 
 
+def test_generates_and_persists_plex_client_id(monkeypatch, tmp_path):
+    _env(monkeypatch, tmp_path)  # no PLEX_CLIENT_ID set
+    from app.configstore import ConfigStore
+
+    settings = load_settings()
+    # A unique generated id, NOT the old shared literal that breaks Plex OAuth.
+    assert settings.plex_client_id
+    assert settings.plex_client_id != "whitelistarr"
+    assert len(settings.plex_client_id) >= 32
+    stored = ConfigStore(str(tmp_path / "config.json"), KEY).load()
+    assert stored["plex_client_id"] == settings.plex_client_id  # persisted
+
+
+def test_keeps_explicit_plex_client_id(monkeypatch, tmp_path):
+    _env(monkeypatch, tmp_path, PLEX_CLIENT_ID="my-stable-id")
+    settings = load_settings()
+    assert settings.plex_client_id == "my-stable-id"
+
+
 def test_runtime_errors_flags_missing_core(monkeypatch, tmp_path):
     _env(monkeypatch, tmp_path, PLEX_URL="", PLEX_TOKEN="")
     settings = load_settings()

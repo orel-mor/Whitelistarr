@@ -83,7 +83,6 @@ CONFIG_SCHEMA: list[dict[str, Any]] = [
              "help": "Comma-separated. Contains tokens, stored encrypted."},
             {"key": "notify_on", "label": "Notify on", "type": "multi",
              "options": ["labeled", "watched", "stale"]},
-            {"key": "notify_test_on_start", "label": "Send test on start", "type": "bool"},
             {"key": "watched_percent", "label": "Watched %", "type": "int",
              "depends_on": _NOTIFY_DEP},
             {"key": "stale_after_days", "label": "Stale after (days)", "type": "int",
