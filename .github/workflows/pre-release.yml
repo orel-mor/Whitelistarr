@@ -45,6 +45,8 @@ jobs:
         uses: python-semantic-release/python-semantic-release@v10.5.3
         with:
           github_token: ${{ secrets.GH_PAT }}
+          # Tag + GitHub Release only — no commit-back (version comes from the tag).
+          commit: "false"
 
       - name: Set up QEMU
         if: steps.release.outputs.released == 'true'
@@ -76,6 +78,8 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
+          build-args: |
+            SETUPTOOLS_SCM_PRETEND_VERSION_FOR_WHITELISTARR=${{ steps.release.outputs.version }}
           tags: |
             orelmor/whitelistarr:beta
             orelmor/whitelistarr:${{ steps.release.outputs.version }}

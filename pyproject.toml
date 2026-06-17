@@ -1,6 +1,8 @@
 [project]
 name = "whitelistarr"
-version = "1.0.1"
+# Version is derived from the latest git tag by setuptools-scm (see
+# [tool.setuptools_scm]); semantic-release creates the tags. Nothing to hand-edit.
+dynamic = ["version"]
 description = "Automatically sync Sonarr/Radarr requester tags to Plex labels and send Apprise notifications for watch milestones."
 readme = "README.md"
 license = "MIT"
@@ -33,8 +35,14 @@ dev = [
 whitelistarr = "app.main:run"
 
 [build-system]
-requires = ["setuptools>=77"]
+requires = ["setuptools>=77", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
+
+# Derive the version from git tags. In the Docker build (no .git in context) the
+# release workflow passes SETUPTOOLS_SCM_PRETEND_VERSION_FOR_WHITELISTARR.
+[tool.setuptools_scm]
+version_scheme = "no-guess-dev"
+local_scheme = "no-local-version"
 
 [tool.setuptools.packages.find]
 include = ["app*"]
@@ -57,18 +65,18 @@ select = ["E", "F", "W", "I", "B", "UP"]
 ignore = ["E501", "B008"]
 
 # ---------------------------------------------------------------------------
-# python-semantic-release: version is bumped from Conventional Commits in CI.
+# python-semantic-release computes the next version from Conventional Commits and
+# creates the git tag + GitHub Release. It does NOT write the version into source
+# or commit anything back (the workflows run it with commit: false, and the
+# version is derived from the tag by setuptools-scm) — so `main` stays free of
+# `chore(release)` bot commits.
 #   feat: -> minor   fix: -> patch   feat!: / BREAKING CHANGE -> major
-# Trunk-based: merges to `main` cut a stable release. The optional, on-demand
-# `beta` branch cuts prereleases (1.2.0-beta.1) for staging. The bump commit
-# carries [skip ci] so it doesn't re-trigger the run.
+# Trunk-based: tags on `main` are stable; the on-demand `beta` branch tags
+# prereleases (1.2.0-beta.1).
 # ---------------------------------------------------------------------------
 [tool.semantic_release]
 tag_format = "v{version}"
-version_toml = ["pyproject.toml:project.version"]
-version_variables = ["app/__init__.py:__version__"]
 build_command = ""
-commit_message = "chore(release): v{version} [skip ci]"
 commit_author = "github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
 
 [tool.semantic_release.branches.main]
