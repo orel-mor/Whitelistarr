@@ -88,6 +88,8 @@ input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); bo
   padding: 18px 20px; margin-bottom: 16px;
 }
 .group h2 { margin: 0 0 14px; font-size: 14px; color: var(--accent); letter-spacing: .3px; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; }
+.row + .row { border-top: 1px solid var(--border); }
 
 /* ---- cron presets ------------------------------------------------------- */
 .cron-presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }

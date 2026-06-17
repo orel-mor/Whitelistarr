@@ -34,8 +34,58 @@
       </aside>
       <main>
         <section x-show="$store.app.route==='status'" x-data="statusView()" x-init="start()">
-          <h1>Status</h1>
-          <p class="muted">Status loads here.</p>
+          <header class="page-head">
+            <h1>Status</h1>
+            <button class="btn small" @click="refresh()">Refresh</button>
+          </header>
+
+          <template x-if="data && !data.configured">
+            <div class="errors">
+              <strong>Not fully configured:</strong>
+              <ul><template x-for="e in data.errors" :key="e"><li x-text="e"></li></template></ul>
+            </div>
+          </template>
+
+          <div class="cards" x-show="data">
+            <div class="group">
+              <h2>Schedule</h2>
+              <template x-if="data && data.jobs.length === 0"><p class="muted">No jobs scheduled.</p></template>
+              <template x-for="j in (data ? data.jobs : [])" :key="j.name">
+                <div class="row">
+                  <strong x-text="j.name"></strong>
+                  <span class="muted" x-text="'next: ' + relativeNext(j.next_run)"></span>
+                </div>
+              </template>
+            </div>
+
+            <div class="group">
+              <h2>Recent activity</h2>
+              <div class="row"><span>Sweep</span>
+                <span class="muted" x-text="summary('sweep')"></span></div>
+              <div class="row"><span>Watch scan</span>
+                <span class="muted" x-text="summary('watch_scan')"></span></div>
+            </div>
+
+            <div class="group">
+              <h2>Connections</h2>
+              <template x-if="connList().length === 0"><p class="muted">No services configured.</p></template>
+              <template x-for="c in connList()" :key="c.name">
+                <div class="row">
+                  <span class="pill" :class="c.ok ? 'ok' : 'err'" x-text="c.name"></span>
+                  <span class="muted" x-text="c.detail"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="group">
+            <h2>Actions</h2>
+            <div class="actions-row">
+              <button class="btn" @click="action('test-notification')">Send test notification</button>
+              <button class="btn" @click="action('sweep')">Run sweep now</button>
+              <button class="btn danger" @click="action('reverse')">Run reverse (remove all labels)</button>
+            </div>
+          </div>
         </section>
         <section x-show="$store.app.route==='settings'" x-data="settings()" x-init="load()">
           <header class="page-head">

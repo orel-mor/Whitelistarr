@@ -32,6 +32,15 @@ const CRON_HUMAN = {
 };
 function cronHuman(expr) { return CRON_HUMAN[(expr || "").trim()] || `cron: ${expr || "—"}`; }
 
+function relativeTime(iso) {
+  if (!iso) return "never";
+  const secs = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+  if (secs < 60) return `${secs}s ago`;
+  if (secs < 3600) return `${Math.round(secs / 60)}m ago`;
+  if (secs < 86400) return `${Math.round(secs / 3600)}h ago`;
+  return `${Math.round(secs / 86400)}d ago`;
+}
+
 // ---- field renderers -------------------------------------------------------
 function renderField(field, value) {
   const wrap = el("div", { className: "field" });
@@ -204,6 +213,44 @@ document.addEventListener("alpine:init", () => {
     },
   }));
 
-  Alpine.data("statusView", () => ({ start() {} }));
+  Alpine.data("statusView", () => ({
+    data: null, timer: null,
+    cronHuman, relativeTime,
+    async start() {
+      await this.refresh();
+      this.timer = setInterval(() => this.refresh(), 10000);
+    },
+    async refresh() {
+      const r = await api("/api/status");
+      if (r.ok) this.data = r.body;
+    },
+    connList() {
+      const c = (this.data && this.data.connections) || {};
+      return Object.keys(c).map((name) => ({ name, ...c[name] }));
+    },
+    relativeNext(iso) {
+      if (!iso) return "—";
+      const secs = Math.round((new Date(iso).getTime() - Date.now()) / 1000);
+      if (secs <= 0) return "due";
+      if (secs < 60) return `in ${secs}s`;
+      if (secs < 3600) return `in ${Math.round(secs / 60)}m`;
+      if (secs < 86400) return `in ${Math.round(secs / 3600)}h`;
+      return `in ${Math.round(secs / 86400)}d`;
+    },
+    summary(job) {
+      const last = this.data && this.data.last && this.data.last[job];
+      if (!last) return "never run";
+      const n = job === "sweep" ? `${last.changed} changed` : `${last.notified} notified`;
+      return `${n}, ${relativeTime(last.at)}`;
+    },
+    async action(name) {
+      if (name === "reverse" && !confirm("Remove ALL managed labels from every Plex item?")) return;
+      const r = await apiPost(`/api/actions/${name}`, name === "reverse" ? { confirm: true } : {});
+      this.$store.app.toast(`${name}: ${r.ok ? JSON.stringify(r.body) : "failed " + r.status}`,
+        r.ok ? "ok" : "err");
+      this.refresh();
+    },
+  }));
+
   Alpine.data("wizard", () => ({}));
 });
