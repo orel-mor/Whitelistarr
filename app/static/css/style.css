@@ -187,6 +187,35 @@ input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); bo
 .wizard-panel h1 { font-weight: 680; }
 .group h2 { text-transform: none; font-weight: 620; }
 
+/* Logs view. */
+.logs-controls { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.logs-controls select, .logs-interval {
+  background: var(--card2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 5px 8px; font-size: 13px;
+}
+.logs-interval { width: 56px; }
+.logs {
+  margin: 16px 24px; padding: 12px 14px; height: 62vh; overflow: auto;
+  background: #0b0e12; border: 1px solid var(--border); border-radius: var(--r);
+  font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap; word-break: break-word;
+}
+.log-line { padding: 1px 0; color: var(--text); }
+.log-time { color: var(--muted); }
+.log-logger { color: var(--muted); }
+.log-level { font-weight: 600; }
+.lvl-debug .log-level { color: #6b7787; }
+.lvl-info .log-level { color: #57a6e0; }
+.lvl-warning { color: #f0b429; }
+.lvl-warning .log-level { color: #f0b429; }
+.lvl-error, .lvl-critical { color: var(--danger); }
+.lvl-error .log-level, .lvl-critical .log-level { color: var(--danger); }
+
+/* Type scale tightening. */
+.page-head h1 { font-weight: 650; }
+.wizard-panel h1 { font-weight: 680; }
+.group h2 { text-transform: none; font-weight: 620; }
+
 /* Respect reduced motion. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

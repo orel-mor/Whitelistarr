@@ -3,7 +3,15 @@ from app.status import StatusTracker
 
 def test_snapshot_empty_before_any_run():
     t = StatusTracker()
-    assert t.snapshot() == {"sweep": None, "watch_scan": None}
+    assert t.snapshot() == {"sweep": None, "watch_scan": None, "reactive": None}
+
+
+def test_reactive_run_is_tracked():
+    t = StatusTracker()
+    t.record("reactive", {"tag_changes": 2, "added": 1, "added_titles": ["Dune"]})
+    snap = t.snapshot()
+    assert snap["reactive"]["tag_changes"] == 2
+    assert snap["reactive"]["added_titles"] == ["Dune"]
 
 
 def test_record_stores_summary_with_timestamp():

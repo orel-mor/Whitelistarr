@@ -18,9 +18,13 @@ log = logging.getLogger(__name__)
 
 
 def setup_logging(level: str) -> None:
+    from app.logbuffer import LOG_BUFFER
+
     logging.basicConfig(
         level=getattr(logging, level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        handlers=[logging.StreamHandler(), LOG_BUFFER.handler()],
+        force=True,
     )
 
 

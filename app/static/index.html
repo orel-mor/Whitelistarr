@@ -125,6 +125,7 @@
         <div class="brand"><img src="/static/logo.svg" alt="" class="brand-logo" />Whitelistarr</div>
         <nav>
           <a :class="{active: $store.app.route==='status'}" href="#/status">Status</a>
+          <a :class="{active: $store.app.route==='logs'}" href="#/logs">Logs</a>
           <a :class="{active: $store.app.route==='settings'}" href="#/settings">Settings</a>
         </nav>
         <div class="sidebar-foot muted">
@@ -160,10 +161,28 @@
 
             <div class="group">
               <h2>Recent activity</h2>
+              <div class="row"><span>Reactive — tag changes</span>
+                <span class="muted" x-text="summary('reactive')"></span></div>
+              <div class="row"><span>Recently added</span>
+                <span class="muted" x-text="recentlyAdded()"></span></div>
               <div class="row"><span>Sweep</span>
                 <span class="muted" x-text="summary('sweep')"></span></div>
               <div class="row"><span>Watch scan</span>
                 <span class="muted" x-text="summary('watch_scan')"></span></div>
+            </div>
+
+            <div class="group">
+              <h2>Labels</h2>
+              <template x-if="labelRows().length === 0">
+                <p class="muted">No tag → label map configured.</p>
+              </template>
+              <template x-for="row in labelRows()" :key="row.tag">
+                <div class="row">
+                  <code x-text="row.tag"></code>
+                  <span class="muted">→</span>
+                  <span class="pill ok" x-text="row.label"></span>
+                </div>
+              </template>
             </div>
 
             <div class="group">
@@ -235,6 +254,28 @@
             <span class="muted" x-text="saving ? 'Saving…' : ''"></span>
             <button class="btn primary" @click="save()">Save</button>
           </div>
+        </section>
+        <section x-show="$store.app.route==='logs'" x-data="logsView()" x-init="start()">
+          <header class="page-head">
+            <h1>Logs</h1>
+            <div class="logs-controls">
+              <select x-model="level" @change="reset()">
+                <option value="">All levels</option>
+                <option value="DEBUG">Debug+</option>
+                <option value="INFO">Info+</option>
+                <option value="WARNING">Warning+</option>
+                <option value="ERROR">Error+</option>
+              </select>
+              <label class="toggle"><input type="checkbox" x-model="auto" /> Auto-refresh</label>
+              <input class="logs-interval" type="number" min="1" x-model.number="intervalSec"
+                     :disabled="!auto" title="Refresh interval (seconds)" />
+              <span class="muted">s</span>
+              <button class="btn small" @click="tick()">Refresh</button>
+              <button class="btn small" @click="clearView()">Clear</button>
+            </div>
+          </header>
+          <pre class="logs" x-ref="box"><template x-for="l in lines" :key="l.id"><div class="log-line" :class="'lvl-' + l.level.toLowerCase()"><span class="log-time" x-text="logTime(l.time)"></span> <span class="log-level" x-text="l.level"></span> <span class="log-logger" x-text="l.logger"></span> <span x-text="l.message"></span></div></template></pre>
+          <p class="muted" x-show="lines.length === 0">No log lines yet.</p>
         </section>
       </main>
     </div>

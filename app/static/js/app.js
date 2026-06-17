@@ -210,11 +210,25 @@ document.addEventListener("alpine:init", () => {
       const c = (this.data && this.data.connections) || {};
       return Object.keys(c).map((name) => ({ name, ...c[name] }));
     },
+    labelRows() {
+      const m = (this.data && this.data.label_map) || {};
+      return Object.keys(m).sort().map((tag) => ({ tag, label: m[tag] }));
+    },
     summary(job) {
       const last = this.data && this.data.last && this.data.last[job];
       if (!last) return "never run";
-      const n = job === "sweep" ? `${last.changed} changed` : `${last.notified} notified`;
+      let n;
+      if (job === "sweep") n = `${last.changed} changed`;
+      else if (job === "reactive") n = `${last.tag_changes} reacted`;
+      else n = `${last.notified} notified`;
       return `${n}, ${relativeTime(last.at)}`;
+    },
+    recentlyAdded() {
+      const last = this.data && this.data.last && this.data.last.reactive;
+      if (!last) return "never run";
+      const titles = (last.added_titles || []).slice(0, 3).join(", ");
+      const what = last.added ? `${last.added} added` : "none";
+      return `${what}${titles ? " (" + titles + ")" : ""}, ${relativeTime(last.at)}`;
     },
     async action(name) {
       if (name === "reverse" && !confirm("Remove ALL managed labels from every Plex item?")) return;
@@ -223,6 +237,46 @@ document.addEventListener("alpine:init", () => {
         r.ok ? "ok" : "err");
       this.refresh();
     },
+  }));
+
+  Alpine.data("logsView", () => ({
+    lines: [], lastId: 0, level: "", auto: true, intervalSec: 3, timer: null,
+    async start() {
+      await this.tick();
+      this.schedule();
+      // Reschedule when the user toggles auto-refresh or changes the interval.
+      this.$watch("auto", () => this.schedule());
+      this.$watch("intervalSec", () => this.schedule());
+      document.addEventListener("visibilitychange", () => {
+        if (this.active() && this.auto) this.tick();
+      });
+    },
+    active() {
+      return this.$store.app.route === "logs" && !document.hidden;
+    },
+    schedule() {
+      clearInterval(this.timer);
+      const secs = Math.max(1, Number(this.intervalSec) || 3);
+      this.timer = setInterval(() => {
+        if (this.active() && this.auto) this.tick();
+      }, secs * 1000);
+    },
+    async tick() {
+      const q = `/api/logs?after=${this.lastId}` + (this.level ? `&level=${this.level}` : "");
+      const r = await api(q);
+      if (!r.ok || !r.body) return;
+      if (r.body.lines.length) {
+        this.lines.push(...r.body.lines);
+        if (this.lines.length > 1000) this.lines.splice(0, this.lines.length - 1000);
+        this.lastId = r.body.last_id;
+        this.$nextTick(() => this.scrollDown());
+      }
+    },
+    // Level change re-queries from scratch so the filter applies to history too.
+    reset() { this.lines = []; this.lastId = 0; this.tick(); },
+    clearView() { this.lines = []; },
+    scrollDown() { const b = this.$refs.box; if (b) b.scrollTop = b.scrollHeight; },
+    logTime(iso) { return (iso || "").replace("T", " ").slice(11, 19); },
   }));
 
   Alpine.data("plexSignIn", () => ({
