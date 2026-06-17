@@ -1,4 +1,8 @@
-# Whitelistarr
+<p align="center">
+  <img src="assets/logo.svg" alt="Whitelistarr" width="360">
+</p>
+
+<h1 align="center">Whitelistarr</h1>
 
 [![Release](https://github.com/orel-mor/Whitelistarr/actions/workflows/release.yml/badge.svg)](https://github.com/orel-mor/Whitelistarr/actions/workflows/release.yml)
 [![CodeQL](https://github.com/orel-mor/Whitelistarr/actions/workflows/codeql.yml/badge.svg)](https://github.com/orel-mor/Whitelistarr/actions/workflows/codeql.yml)
