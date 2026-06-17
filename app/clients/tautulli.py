@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
+import httpx
 from httpx import USE_CLIENT_DEFAULT
 
 from app.clients.base import PROBE_TIMEOUT, HttpClient
+
+log = logging.getLogger(__name__)
 
 
 class TautulliError(RuntimeError):
@@ -46,8 +50,13 @@ class TautulliClient:
     def check(self) -> dict:
         try:
             data = self._command("get_server_info", timeout=PROBE_TIMEOUT)
-        except Exception as exc:  # noqa: BLE001
-            return {"ok": False, "detail": str(exc)}
+        except TautulliError:
+            return {"ok": False, "detail": "request rejected"}
+        except httpx.HTTPStatusError as exc:
+            return {"ok": False, "detail": f"HTTP {exc.response.status_code}"}
+        except Exception:  # noqa: BLE001
+            log.warning("Connection probe failed", exc_info=True)
+            return {"ok": False, "detail": "unreachable"}
         name = (data or {}).get("pms_name") or "OK"
         return {"ok": True, "detail": str(name)}
 

@@ -95,10 +95,13 @@ class Runtime:
         try:
             new_components = self._builder(new_settings)
         except Exception as exc:  # noqa: BLE001 - any build failure -> keep old
+            # Surface only the exception type (e.g. "Unauthorized",
+            # "ConnectionError") to the UI; the full detail is logged server-side
+            # so exception text/tracebacks never reach the browser.
             log.exception("Reload failed to build components; keeping current ones")
             return ReloadResult(
                 ok=False,
-                error=str(exc),
+                error=type(exc).__name__,
                 restart_required=bool(restart_fields),
                 restart_fields=restart_fields or None,
             )

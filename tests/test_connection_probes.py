@@ -21,13 +21,13 @@ def test_arr_check_ok():
 
 
 @respx.mock
-def test_arr_check_failure():
+def test_arr_check_failure_reports_status_not_exception():
     respx.get(f"{ARR}/api/v3/system/status").mock(
         return_value=httpx.Response(401, json={"error": "Unauthorized"})
     )
     out = RadarrClient(ARR, "k").check()
     assert out["ok"] is False
-    assert out["detail"]
+    assert out["detail"] == "HTTP 401"  # status code, not raw exception text
 
 
 @respx.mock
@@ -83,4 +83,4 @@ def test_plex_check_failure_when_server_raises():
     client._server = Boom()
     out = client.check()
     assert out["ok"] is False
-    assert "connection refused" in out["detail"]
+    assert out["detail"] == "unreachable"  # generic, no exception text leaked

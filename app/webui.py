@@ -160,8 +160,9 @@ def create_webui_router(
             return name, result
         except TimeoutError:
             return name, {"ok": False, "detail": "timed out"}
-        except Exception as exc:  # noqa: BLE001 - any probe failure is just "not ok"
-            return name, {"ok": False, "detail": str(exc)}
+        except Exception:  # noqa: BLE001 - log server-side; never surface exception text
+            log.warning("Connection probe error for %s", name, exc_info=True)
+            return name, {"ok": False, "detail": "error"}
 
     async def _connections(comps: Any) -> dict[str, dict]:
         now = time.monotonic()
