@@ -127,6 +127,9 @@ class TestSettings:
         assert s.watched_percent == 85
         assert s.feature_reactive is True
         assert s.reactive_interval_seconds == 60
+        assert s.notify_on == "labeled,watched,stale"
+        assert s.notify_events == ["labeled", "watched", "stale"]
+        assert s.feature_ui is True
 
     def test_notify_test_on_start_removed(self, monkeypatch):
         for k, v in _base_env().items():
@@ -173,7 +176,7 @@ class TestSettings:
         s = Settings()
         s.validate_runtime()  # should not raise
         assert s.apprise_url_list == ["json://localhost"]
-        assert s.notify_events == ["watched", "stale"]
+        assert s.notify_events == ["labeled", "watched", "stale"]
 
 
 class TestCronMigration:

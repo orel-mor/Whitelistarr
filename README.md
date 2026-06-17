@@ -301,7 +301,7 @@ declarative deploy) or in the web UI, where they apply live.
 | `SEERR_URL` / `SEERR_API_KEY` | — | Seerr connection (`OVERSEERR_*` also accepted) |
 | `TAUTULLI_URL` / `TAUTULLI_API_KEY` | — | Tautulli (required if `FEATURE_NOTIFY=true`) |
 | `APPRISE_URLS` | — | CSV of [Apprise URLs](https://github.com/caronc/apprise/wiki) |
-| `NOTIFY_ON` | `watched,stale` | Events to notify on: `labeled`, `watched`, `stale` |
+| `NOTIFY_ON` | `labeled,watched,stale` | Events to notify on: `labeled`, `watched`, `stale` |
 
 > The legacy `SWEEP_INTERVAL_MINUTES` / `WATCH_SCAN_INTERVAL_MINUTES` are still
 > accepted and auto-migrated to the matching `*_CRON` value on load.
