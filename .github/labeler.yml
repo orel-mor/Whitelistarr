@@ -1,0 +1,33 @@
+# Path-based PR labels, applied by .github/workflows/labeler.yml (actions/labeler@v5).
+# Only labels that already exist in the repo are used.
+
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "app/static/**"
+
+backend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "app/**/*.py"
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tests/**"
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - ".env.example"
+
+github_actions:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "pyproject.toml"

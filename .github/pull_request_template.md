@@ -1,6 +1,10 @@
 ## What & why
 
-<!-- Briefly: what does this change and why? Link any issue (#123). -->
+<!-- Briefly: what does this change and why? -->
+
+<!-- To auto-close issues on merge, put a keyword before EACH number:
+     "Closes #12, Closes #13"  (a comma list like "Closes #12, #13" closes only #12). -->
+Closes #
 
 ## Conventional Commit
 
