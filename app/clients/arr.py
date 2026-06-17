@@ -29,6 +29,16 @@ class ArrClient:
     def get_all(self) -> list[dict[str, Any]]:
         return self._http.get_json(self.lookup_path)
 
+    def check(self) -> dict[str, Any]:
+        """Probe reachability/auth via /api/v3/system/status."""
+        try:
+            data = self._http.get_json("/api/v3/system/status")
+        except Exception as exc:  # noqa: BLE001 - report any failure as not-ok
+            return {"ok": False, "detail": str(exc)}
+        name = data.get("appName") or "OK"
+        version = data.get("version") or ""
+        return {"ok": True, "detail": f"{name} {version}".strip()}
+
     def _guid_keys(self, item: dict[str, Any]) -> set[str]:
         raise NotImplementedError
 

@@ -39,6 +39,13 @@ class SeerrClient:
             if skip // PAGE_SIZE >= pages:
                 break
 
+    def check(self) -> dict:
+        try:
+            data = self._http.get_json("/api/v1/status")
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "detail": str(exc)}
+        return {"ok": True, "detail": f"v{data.get('version', 'OK')}"}
+
     def close(self) -> None:
         self._http.close()
 

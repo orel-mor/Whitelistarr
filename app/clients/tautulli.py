@@ -41,5 +41,13 @@ class TautulliClient:
             return data.get("data", [])
         return data or []
 
+    def check(self) -> dict:
+        try:
+            data = self._command("get_server_info")
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "detail": str(exc)}
+        name = (data or {}).get("pms_name") or "OK"
+        return {"ok": True, "detail": str(name)}
+
     def close(self) -> None:
         self._http.close()
