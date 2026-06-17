@@ -7,7 +7,7 @@ wipe recent-activity history shown on the Status screen.
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 _JOBS = ("sweep", "watch_scan")
@@ -19,7 +19,7 @@ class StatusTracker:
 
     def record(self, job: str, summary: dict[str, Any]) -> None:
         entry = dict(summary)
-        entry["at"] = datetime.now(timezone.utc).isoformat()
+        entry["at"] = datetime.now(UTC).isoformat()
         self._last[job] = entry
 
     def snapshot(self) -> dict[str, Any]:
