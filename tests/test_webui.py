@@ -197,7 +197,7 @@ def test_static_serves_packaged_files(tmp_path):
     client, _, _ = _client(tmp_path)
     for name in (
         "index.html", "vendor/alpine.min.js", "css/style.css",
-        "js/api.js", "js/router.js", "js/store.js", "js/app.js",
+        "js/api.js", "js/router.js", "js/store.js", "js/helpers.js", "js/app.js",
     ):
         assert client.get(f"/static/{name}").status_code == 200, name
 

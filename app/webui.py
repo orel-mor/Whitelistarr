@@ -44,6 +44,7 @@ _STATIC_NAMES = (
     "js/api.js",
     "js/router.js",
     "js/store.js",
+    "js/helpers.js",
     "js/app.js",
 )
 _STATIC_FILES = {name: STATIC_DIR / name for name in _STATIC_NAMES}
