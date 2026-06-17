@@ -36,6 +36,27 @@ def test_ui_boots_when_unconfigured(monkeypatch, tmp_path):
         assert client.post("/webhook/seerr", json={"notification_type": "MEDIA_AVAILABLE"}).status_code == 503
 
 
+def test_csrf_blocks_cross_origin_mutation(monkeypatch, tmp_path):
+    with TestClient(_app(monkeypatch, tmp_path)) as client:
+        r = client.post("/api/config", json={"plex_url": "x"},
+                        headers={"Origin": "http://evil.example"})
+        assert r.status_code == 403
+
+
+def test_csrf_allows_same_origin_mutation(monkeypatch, tmp_path):
+    with TestClient(_app(monkeypatch, tmp_path)) as client:
+        r = client.post("/api/config", json={"plex_url": "x"},
+                        headers={"Origin": "http://testserver"})
+        assert r.status_code != 403
+
+
+def test_csrf_allows_request_without_origin(monkeypatch, tmp_path):
+    # Webhooks / CLI clients send no Origin and must keep working.
+    with TestClient(_app(monkeypatch, tmp_path)) as client:
+        r = client.post("/api/config", json={"plex_url": "x"})
+        assert r.status_code != 403
+
+
 def test_save_config_via_api_persists(monkeypatch, tmp_path):
     with TestClient(_app(monkeypatch, tmp_path)) as client:
         resp = client.post("/api/config", json={
