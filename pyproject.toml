@@ -48,7 +48,7 @@ local_scheme = "no-local-version"
 include = ["app*"]
 
 [tool.setuptools.package-data]
-app = ["static/*"]
+app = ["static/*", "static/**/*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

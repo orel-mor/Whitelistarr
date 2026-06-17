@@ -4,36 +4,51 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Whitelistarr</title>
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <script defer src="/static/js/api.js"></script>
+  <script defer src="/static/js/router.js"></script>
+  <script defer src="/static/js/store.js"></script>
+  <script defer src="/static/js/app.js"></script>
+  <script defer src="/static/vendor/alpine.min.js"></script>
 </head>
-<body>
-  <header>
-    <h1>Whitelistarr</h1>
-    <span id="version" class="muted"></span>
-  </header>
+<body x-data x-init="$store.app.init()">
+  <template x-if="$store.app.route === 'setup'">
+    <main id="wizard" x-data="wizard()">
+      <h1>Setup</h1>
+      <p class="muted">Wizard loads here.</p>
+    </main>
+  </template>
 
-  <div id="banner" class="banner hidden"></div>
-  <div id="errors" class="errors hidden"></div>
+  <template x-if="$store.app.route !== 'setup'">
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">Whitelistarr</div>
+        <nav>
+          <a :class="{active: $store.app.route==='status'}" href="#/status">Status</a>
+          <a :class="{active: $store.app.route==='settings'}" href="#/settings">Settings</a>
+        </nav>
+        <div class="sidebar-foot muted">
+          <span x-text="$store.app.version"></span>
+          <p>No built-in auth — keep behind a reverse proxy.</p>
+        </div>
+      </aside>
+      <main>
+        <section x-show="$store.app.route==='status'" x-data="statusView()" x-init="start()">
+          <h1>Status</h1>
+          <p class="muted">Status loads here.</p>
+        </section>
+        <section x-show="$store.app.route==='settings'" x-data="settings()" x-init="load()">
+          <h1>Settings</h1>
+          <p class="muted">Settings load here.</p>
+        </section>
+      </main>
+    </div>
+  </template>
 
-  <main>
-    <section id="actions" class="card">
-      <h2>Actions</h2>
-      <div class="actions-row">
-        <button data-action="test-notification" class="btn">Send test notification</button>
-        <button data-action="sweep" class="btn">Run sweep now</button>
-        <button data-action="reverse" class="btn danger">Run reverse (remove all labels)</button>
-      </div>
-      <div id="action-result" class="muted"></div>
-    </section>
-
-    <form id="config-form"></form>
-  </main>
-
-  <div class="savebar">
-    <span id="save-status" class="muted"></span>
-    <button id="save-btn" class="btn primary" type="button">Save</button>
+  <div class="toasts">
+    <template x-for="t in $store.app.toasts" :key="t.id">
+      <div class="toast" :class="t.kind" x-text="t.msg"></div>
+    </template>
   </div>
-
-  <script src="/static/app.js"></script>
 </body>
 </html>

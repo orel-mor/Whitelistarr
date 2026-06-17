@@ -22,11 +22,19 @@ log = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).parent / "static"
 _MEDIA = {".html": "text/html", ".js": "text/javascript", ".css": "text/css"}
 
-# The web UI ships exactly these static assets. Map each name to a pre-built,
-# constant path so a request only ever looks one up by key — the user-provided
-# name never enters a filesystem path expression, so it can't traverse out of
+# The web UI ships exactly these static assets, keyed by their request path. The
+# user-provided path is only ever used as a dict key, so it can't traverse out of
 # STATIC_DIR or read arbitrary files.
-_STATIC_FILES = {name: STATIC_DIR / name for name in ("index.html", "app.js", "style.css")}
+_STATIC_NAMES = (
+    "index.html",
+    "vendor/alpine.min.js",
+    "css/style.css",
+    "js/api.js",
+    "js/router.js",
+    "js/store.js",
+    "js/app.js",
+)
+_STATIC_FILES = {name: STATIC_DIR / name for name in _STATIC_NAMES}
 
 
 def _static_response(name: str) -> Response:
@@ -50,7 +58,7 @@ def create_webui_router(
     async def index() -> Response:
         return _static_response("index.html")
 
-    @router.get("/static/{name}")
+    @router.get("/static/{name:path}")
     async def static_file(name: str) -> Response:
         return _static_response(name)
 

@@ -185,28 +185,32 @@ def test_plex_servers_then_apply_writes_url_and_token(tmp_path):
 
 def test_static_serves_packaged_files(tmp_path):
     client, _, _ = _client(tmp_path)
-    for name in ("index.html", "app.js", "style.css"):
-        assert client.get(f"/static/{name}").status_code == 200
+    for name in (
+        "index.html", "vendor/alpine.min.js", "css/style.css",
+        "js/api.js", "js/router.js", "js/store.js", "js/app.js",
+    ):
+        assert client.get(f"/static/{name}").status_code == 200, name
 
 
 def test_static_rejects_traversal(tmp_path):
     # Names that resolve outside the static dir, or to a non-file, must 404 —
-    # never serve arbitrary files from the package/filesystem. Encoded separators
-    # are the server-reachable form (a plain `..` is normalized away by the client).
+    # never serve arbitrary files from the package/filesystem. Only the fixed
+    # allowlist is served; anything else (incl. encoded separators) 404s.
     client, _, _ = _client(tmp_path)
     for name in (
         "does-not-exist.js",
         "%2e%2e%2fconfig.py",
         "%2e%2e%2f%2e%2e%2fpyproject.toml",
+        "js/../../config.py",
     ):
         assert client.get(f"/static/{name}").status_code == 404
 
 
-def test_static_confines_to_static_dir(tmp_path):
-    # Directly exercise the confinement: a sibling package file (config.py lives in
-    # app/, one level above app/static/) must not be served.
+def test_static_confines_to_allowlist(tmp_path):
+    # Directly exercise the confinement: only allowlisted relative paths resolve.
     from app.webui import _static_response
 
     assert _static_response("..").status_code == 404
     assert _static_response("../config.py").status_code == 404
+    assert _static_response("js/../store.js").status_code == 404
     assert _static_response("index.html").status_code == 200
