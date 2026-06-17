@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -69,7 +70,7 @@ def parse_seerr_payload(payload: dict[str, Any]) -> SeerrEvent:
 
 
 def create_app(
-    sync: Any,
+    get_sync: Callable[[], Any],
     webhook_path: str = "/webhook/seerr",
     plex_webhook_path: str = "/webhook/plex",
     secret: str = "",
@@ -94,6 +95,7 @@ def create_app(
 
     @app.post(webhook_path)
     async def seerr_webhook(request: Request) -> Response:
+        sync = get_sync()
         if sync is None:
             return Response(status_code=503)
         if not _secret_ok(request):
@@ -127,6 +129,7 @@ def create_app(
 
     @app.post(plex_webhook_path)
     async def plex_webhook(request: Request) -> Response:
+        sync = get_sync()
         if sync is None:
             return Response(status_code=503)
         if not _secret_ok(request):
