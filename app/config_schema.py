@@ -73,6 +73,11 @@ CONFIG_SCHEMA: list[dict[str, Any]] = [
         "tier": "core",
         "fields": [
             {"key": "feature_webhook", "label": "Webhook receiver", "type": "bool"},
+            {"key": "feature_reactive", "label": "Reactive poll", "type": "bool",
+             "help": "Fast poll: reacts to arr tag changes + Plex recently-added "
+                     "(no Plex webhook needed)."},
+            {"key": "reactive_interval_seconds", "label": "Reactive interval (sec)",
+             "type": "int", "depends_on": {"key": "feature_reactive", "value": True}},
             {"key": "feature_sweep", "label": "Periodic sweep", "type": "bool"},
             {"key": "sweep_cron", "label": "Sweep schedule", "type": "cron",
              "placeholder": "0 * * * *", "help": "When the reconcile sweep runs."},

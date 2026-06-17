@@ -105,6 +105,10 @@ class Settings(BaseSettings):
     feature_webhook: bool = True
     feature_sweep: bool = True
     feature_notify: bool = False
+    # Fast reactive poller: reacts to arr tag changes + Plex recently-added between
+    # sweeps, removing the need for a manual Plex webhook (Plex Pass only).
+    feature_reactive: bool = True
+    reactive_interval_seconds: int = 60
     # Cron expressions (5-field). Legacy *_interval_minutes below are migrated in.
     sweep_cron: str = "0 * * * *"  # hourly
     watch_scan_cron: str = "0 3 * * *"  # daily at 03:00

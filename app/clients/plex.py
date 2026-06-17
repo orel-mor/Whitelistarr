@@ -132,6 +132,25 @@ class PlexClient:
             for video in section.all():
                 yield PlexItem(video, media_type)
 
+    def recently_added(self, since: datetime | None, cap: int = 100) -> list[PlexItem]:
+        """Return items added after ``since`` (newest first), across matching sections.
+
+        Each section is searched ``addedAt`` descending; because the list is sorted
+        we can stop at the first item at/older than the watermark. ``since=None``
+        returns the most-recent ``cap`` items per section (used to baseline).
+        """
+        items: list[PlexItem] = []
+        for section in self._sections():
+            media_type = _SECTION_TYPE[section.type]
+            for video in section.search(sort="addedAt:desc", maxresults=cap):
+                item = PlexItem(video, media_type)
+                if since is not None:
+                    added_at = item.added_at
+                    if added_at is None or added_at <= since:
+                        break  # sorted desc -> everything after is older too
+                items.append(item)
+        return items
+
     def fetch_labelable(self, rating_key: str | int) -> PlexItem | None:
         """Fetch the labelable item for a Plex ratingKey.
 
