@@ -34,10 +34,10 @@ class ReloadResult:
     restart_fields: list[str] | None = None
 
 
-def _default_builder(settings: Any) -> Any:
+def _default_builder(settings: Any, tracker: Any) -> Any:
     from app.main import build_components
 
-    return build_components(settings)
+    return build_components(settings, tracker=tracker)
 
 
 class Runtime:
@@ -47,15 +47,23 @@ class Runtime:
         components: Any | None,
         builder: Callable[[Any], Any] | None = None,
         scheduler_started: bool = False,
+        tracker: Any | None = None,
     ) -> None:
+        from app.status import StatusTracker
+
         self._settings = settings
         self._components = components
-        self._builder = builder or _default_builder
+        self._tracker = tracker or StatusTracker()
+        self._builder = builder or (lambda s: _default_builder(s, self._tracker))
         self._scheduler_started = scheduler_started
 
     @property
     def settings(self) -> Any:
         return self._settings
+
+    @property
+    def tracker(self) -> Any:
+        return self._tracker
 
     @property
     def components(self) -> Any | None:
