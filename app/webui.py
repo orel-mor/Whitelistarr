@@ -128,6 +128,40 @@ def create_webui_router(
             return JSONResponse({"error": "Not configured"}, status_code=409)
         return JSONResponse({"ok": bool(_send_test_notification(settings))})
 
+    _PROBE_SERVICES = ("plex", "radarr", "sonarr", "seerr", "tautulli")
+
+    @router.get("/api/status")
+    async def status() -> dict:
+        settings = runtime.settings
+        comps = runtime.components
+        jobs = []
+        connections: dict[str, Any] = {}
+        if comps is not None:
+            for job in comps.scheduler.jobs():
+                nrt = getattr(job, "next_run_time", None)
+                jobs.append(
+                    {"name": job.name, "next_run": nrt.isoformat() if hasattr(nrt, "isoformat") else nrt}
+                )
+            for name in _PROBE_SERVICES:
+                client = getattr(comps, name, None)
+                if client is not None:
+                    connections[name] = client.check()
+        return {
+            "configured": not settings.runtime_errors(),
+            "errors": settings.runtime_errors(),
+            "jobs": jobs,
+            "last": runtime.tracker.snapshot(),
+            "connections": connections,
+        }
+
+    @router.post("/api/connections/test/{service}")
+    async def connection_test(service: str) -> Response:
+        comps = runtime.components
+        client = getattr(comps, service, None) if comps is not None else None
+        if service not in _PROBE_SERVICES or client is None:
+            return JSONResponse({"error": "Service not configured"}, status_code=409)
+        return JSONResponse(client.check())
+
     # pin_id -> auth token, held server-side only (never sent to the browser).
     _pin_tokens: dict[str, str] = {}
 
