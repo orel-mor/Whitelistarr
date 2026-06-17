@@ -111,8 +111,9 @@ class PlexClient:
     def check(self) -> dict:
         try:
             name = self._server.friendlyName
-        except Exception as exc:  # noqa: BLE001
-            return {"ok": False, "detail": str(exc)}
+        except Exception:  # noqa: BLE001 - generic detail; full error logged, never sent to UI
+            log.warning("Plex connection probe failed", exc_info=True)
+            return {"ok": False, "detail": "unreachable"}
         return {"ok": True, "detail": str(name)}
 
     def _sections(self) -> list[object]:

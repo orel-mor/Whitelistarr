@@ -61,7 +61,7 @@ def test_reload_rolls_back_on_build_failure():
     rt.start()
     result = rt.reload(_settings(plex_url="http://bad:32400"))
     assert result.ok is False
-    assert "Plex" in result.error
+    assert result.error == "RuntimeError"           # class name, not raw message
     assert rt.label_sync == "old"                   # unchanged
     assert old.scheduler.shutdown_called is False   # still running
 

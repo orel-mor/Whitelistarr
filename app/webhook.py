@@ -12,6 +12,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request, Response
 from starlette.concurrency import run_in_threadpool
@@ -80,6 +81,21 @@ def create_app(
     app = FastAPI(title="Whitelistarr", lifespan=lifespan)
     if webui_router is not None:
         app.include_router(webui_router)
+
+    @app.middleware("http")
+    async def _block_cross_origin(request: Request, call_next: Any) -> Any:
+        # The UI has no auth, so a malicious page could cross-origin POST to a
+        # reachable instance. Reject mutating /api requests whose Origin host
+        # differs from the Host we were addressed by. Webhooks/CLI send no Origin
+        # (allowed); reverse proxies that preserve Host still match.
+        if request.method in ("POST", "PUT", "PATCH", "DELETE") and request.url.path.startswith(
+            "/api/"
+        ):
+            origin = request.headers.get("origin")
+            if origin and urlsplit(origin).netloc != request.headers.get("host", ""):
+                log.warning("Rejected cross-origin %s %s", request.method, request.url.path)
+                return Response(status_code=403)
+        return await call_next(request)
 
     def _secret_ok(request: Request) -> bool:
         if not secret:

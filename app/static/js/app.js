@@ -15,31 +15,8 @@ const SERVICE_OF_GROUP = {
   Plex: "plex", Radarr: "radarr", Sonarr: "sonarr", Seerr: "seerr", Tautulli: "tautulli",
 };
 
-const CRON_PRESETS = [
-  { label: "Hourly", value: "0 * * * *" },
-  { label: "Every 6h", value: "0 */6 * * *" },
-  { label: "Every 12h", value: "0 */12 * * *" },
-  { label: "Daily", value: "0 3 * * *" },
-  { label: "Weekly", value: "0 3 * * 0" },
-];
-
-const CRON_HUMAN = {
-  "0 * * * *": "every hour",
-  "0 */6 * * *": "every 6 hours",
-  "0 */12 * * *": "every 12 hours",
-  "0 3 * * *": "daily at 03:00",
-  "0 3 * * 0": "weekly (Sun 03:00)",
-};
-function cronHuman(expr) { return CRON_HUMAN[(expr || "").trim()] || `cron: ${expr || "—"}`; }
-
-function relativeTime(iso) {
-  if (!iso) return "never";
-  const secs = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
-  if (secs < 60) return `${secs}s ago`;
-  if (secs < 3600) return `${Math.round(secs / 60)}m ago`;
-  if (secs < 86400) return `${Math.round(secs / 3600)}h ago`;
-  return `${Math.round(secs / 86400)}d ago`;
-}
+// CRON_PRESETS, CRON_HUMAN, cronHuman, relativeTime, relativeNext come from
+// helpers.js (loaded first; assigned to window). Kept DOM-free + Node-testable.
 
 // ---- field renderers -------------------------------------------------------
 function renderField(field, value) {
@@ -215,10 +192,15 @@ document.addEventListener("alpine:init", () => {
 
   Alpine.data("statusView", () => ({
     data: null, timer: null,
-    cronHuman, relativeTime,
     async start() {
       await this.refresh();
-      this.timer = setInterval(() => this.refresh(), 10000);
+      // Poll, but only fetch while the Status screen is showing and the tab is
+      // visible — don't hammer /api/status (and the arr/Plex APIs) off-screen.
+      this.timer = setInterval(() => { if (this.active()) this.refresh(); }, 10000);
+      document.addEventListener("visibilitychange", () => { if (this.active()) this.refresh(); });
+    },
+    active() {
+      return this.$store.app.route === "status" && !document.hidden;
     },
     async refresh() {
       const r = await api("/api/status");
@@ -227,15 +209,6 @@ document.addEventListener("alpine:init", () => {
     connList() {
       const c = (this.data && this.data.connections) || {};
       return Object.keys(c).map((name) => ({ name, ...c[name] }));
-    },
-    relativeNext(iso) {
-      if (!iso) return "—";
-      const secs = Math.round((new Date(iso).getTime() - Date.now()) / 1000);
-      if (secs <= 0) return "due";
-      if (secs < 60) return `in ${secs}s`;
-      if (secs < 3600) return `in ${Math.round(secs / 60)}m`;
-      if (secs < 86400) return `in ${Math.round(secs / 3600)}h`;
-      return `in ${Math.round(secs / 86400)}d`;
     },
     summary(job) {
       const last = this.data && this.data.last && this.data.last[job];

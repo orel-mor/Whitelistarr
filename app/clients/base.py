@@ -5,8 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+from httpx import USE_CLIENT_DEFAULT
 
 DEFAULT_TIMEOUT = 30.0
+# Short timeout for liveness probes so a dead service fails fast (vs the 30s default).
+PROBE_TIMEOUT = 4.0
 
 
 class HttpClient:
@@ -30,8 +33,10 @@ class HttpClient:
             transport=transport,
         )
 
-    def get_json(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        resp = self._client.get(path, params=params)
+    def get_json(
+        self, path: str, params: dict[str, Any] | None = None, timeout: Any = USE_CLIENT_DEFAULT
+    ) -> Any:
+        resp = self._client.get(path, params=params, timeout=timeout)
         resp.raise_for_status()
         return resp.json()
 

@@ -7,11 +7,16 @@ shared GUID makes us robust to which id a given Plex agent stored.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from typing import Any
 
-from app.clients.base import HttpClient
+import httpx
+
+from app.clients.base import PROBE_TIMEOUT, HttpClient
 from app.core.matching import guid_key
+
+log = logging.getLogger(__name__)
 
 
 class ArrClient:
@@ -30,11 +35,19 @@ class ArrClient:
         return self._http.get_json(self.lookup_path)
 
     def check(self) -> dict[str, Any]:
-        """Probe reachability/auth via /api/v3/system/status."""
+        """Probe reachability/auth via /api/v3/system/status.
+
+        Failure details are deliberately generic (status code or "unreachable") —
+        the raw exception is logged server-side, never returned to the browser, so
+        internal details can't leak through the UI.
+        """
         try:
-            data = self._http.get_json("/api/v3/system/status")
-        except Exception as exc:  # noqa: BLE001 - report any failure as not-ok
-            return {"ok": False, "detail": str(exc)}
+            data = self._http.get_json("/api/v3/system/status", timeout=PROBE_TIMEOUT)
+        except httpx.HTTPStatusError as exc:
+            return {"ok": False, "detail": f"HTTP {exc.response.status_code}"}
+        except Exception:  # noqa: BLE001 - any other failure is just "not ok"
+            log.warning("Connection probe failed", exc_info=True)
+            return {"ok": False, "detail": "unreachable"}
         name = data.get("appName") or "OK"
         version = data.get("version") or ""
         return {"ok": True, "detail": f"{name} {version}".strip()}

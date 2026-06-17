@@ -1,3 +1,4 @@
+import time
 from types import SimpleNamespace
 
 from cryptography.fernet import Fernet
@@ -10,6 +11,69 @@ from app.status import StatusTracker
 from app.webui import create_webui_router
 
 KEY = Fernet.generate_key().decode()
+
+
+def _rt_with_plex(plex_check, tmp_path):
+    settings = Settings(
+        plex_url="http://p", plex_token="t",
+        radarr_url="http://r", radarr_api_key="k",
+        sonarr_url="http://s", sonarr_api_key="k", tag_label_map="a:b",
+    )
+    comps = SimpleNamespace(
+        scheduler=FakeScheduler(),
+        plex=SimpleNamespace(check=plex_check),
+        radarr=None, sonarr=None, seerr=None, tautulli=None, label_sync="ls",
+    )
+
+    class RT:
+        def __init__(self):
+            self.settings = settings
+            self.components = comps
+            self.tracker = StatusTracker()
+            self.label_sync = "ls"
+
+    store = ConfigStore(str(tmp_path / "c.json"), KEY)
+    app = FastAPI()
+    app.include_router(create_webui_router(runtime=RT(), store=store))
+    return TestClient(app)
+
+
+def test_status_caches_connections(tmp_path):
+    calls = {"n": 0}
+
+    def chk():
+        calls["n"] += 1
+        return {"ok": True, "detail": "x"}
+
+    client = _rt_with_plex(chk, tmp_path)
+    client.get("/api/status")
+    client.get("/api/status")
+    assert calls["n"] == 1  # second poll served from cache
+
+
+def test_status_handles_probe_exception(tmp_path):
+    def chk():
+        raise RuntimeError("boom")
+
+    client = _rt_with_plex(chk, tmp_path)
+    r = client.get("/api/status")
+    assert r.status_code == 200
+    assert r.json()["connections"]["plex"]["ok"] is False
+
+
+def test_status_bounds_slow_probe(tmp_path, monkeypatch):
+    import app.webui as webui
+
+    monkeypatch.setattr(webui, "PROBE_TIMEOUT", 0.05)
+
+    def chk():
+        time.sleep(0.4)
+        return {"ok": True, "detail": "slow"}
+
+    client = _rt_with_plex(chk, tmp_path)
+    body = client.get("/api/status").json()
+    assert body["connections"]["plex"]["ok"] is False
+    assert "out" in body["connections"]["plex"]["detail"]  # "timed out"
 
 
 class FakeJob:

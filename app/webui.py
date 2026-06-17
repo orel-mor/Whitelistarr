@@ -6,18 +6,30 @@ is easy to test and the app can serve the UI even when nothing is configured yet
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import ValidationError
+from starlette.concurrency import run_in_threadpool
 
 from app.config import Settings
 from app.config_schema import CONFIG_SCHEMA, field_keys, secret_keys
 
 log = logging.getLogger(__name__)
+
+# Connection probes run off the event loop, each bounded by this many seconds, and
+# the combined result is cached briefly so a 10s status poll doesn't hammer the
+# upstream services (or stall when one is unreachable).
+PROBE_TIMEOUT = 5.0
+CONN_CACHE_TTL = 8.0
+# How long a Plex auth token from an in-progress sign-in is kept server-side
+# before an abandoned flow's token is purged.
+PIN_TTL = 600.0
 
 STATIC_DIR = Path(__file__).parent / "static"
 _MEDIA = {".html": "text/html", ".js": "text/javascript", ".css": "text/css"}
@@ -32,6 +44,7 @@ _STATIC_NAMES = (
     "js/api.js",
     "js/router.js",
     "js/store.js",
+    "js/helpers.js",
     "js/app.js",
 )
 _STATIC_FILES = {name: STATIC_DIR / name for name in _STATIC_NAMES}
@@ -137,6 +150,29 @@ def create_webui_router(
         return JSONResponse({"ok": bool(_send_test_notification(settings))})
 
     _PROBE_SERVICES = ("plex", "radarr", "sonarr", "seerr", "tautulli")
+    _conn_cache: dict[str, Any] = {"at": 0.0, "data": None}
+
+    async def _probe(name: str, client: Any) -> tuple[str, dict]:
+        # Run the blocking client.check() off the event loop and bound it, so a
+        # dead service can't stall the loop or the status poll.
+        try:
+            result = await asyncio.wait_for(run_in_threadpool(client.check), PROBE_TIMEOUT)
+            return name, result
+        except TimeoutError:
+            return name, {"ok": False, "detail": "timed out"}
+        except Exception:  # noqa: BLE001 - log server-side; never surface exception text
+            log.warning("Connection probe error for %s", name, exc_info=True)
+            return name, {"ok": False, "detail": "error"}
+
+    async def _connections(comps: Any) -> dict[str, dict]:
+        now = time.monotonic()
+        if _conn_cache["data"] is not None and now - _conn_cache["at"] < CONN_CACHE_TTL:
+            return _conn_cache["data"]
+        clients = [(n, getattr(comps, n, None)) for n in _PROBE_SERVICES]
+        pairs = await asyncio.gather(*[_probe(n, c) for n, c in clients if c is not None])
+        data = dict(pairs)
+        _conn_cache.update(at=now, data=data)
+        return data
 
     @router.get("/api/status")
     async def status() -> dict:
@@ -150,10 +186,7 @@ def create_webui_router(
                 jobs.append(
                     {"name": job.name, "next_run": nrt.isoformat() if hasattr(nrt, "isoformat") else nrt}
                 )
-            for name in _PROBE_SERVICES:
-                client = getattr(comps, name, None)
-                if client is not None:
-                    connections[name] = client.check()
+            connections = await _connections(comps)
         return {
             "configured": not settings.runtime_errors(),
             "errors": settings.runtime_errors(),
@@ -168,10 +201,25 @@ def create_webui_router(
         client = getattr(comps, service, None) if comps is not None else None
         if service not in _PROBE_SERVICES or client is None:
             return JSONResponse({"error": "Service not configured"}, status_code=409)
-        return JSONResponse(client.check())
+        _, result = await _probe(service, client)
+        return JSONResponse(result)
 
-    # pin_id -> auth token, held server-side only (never sent to the browser).
-    _pin_tokens: dict[str, str] = {}
+    # pin_id -> (auth token, stored_at). Held server-side only (never sent to the
+    # browser) and purged after PIN_TTL so an abandoned sign-in doesn't linger.
+    _pin_tokens: dict[str, tuple[str, float]] = {}
+
+    def _store_pin_token(pin_id: str, token: str) -> None:
+        _pin_tokens[str(pin_id)] = (token, time.monotonic())
+
+    def _get_pin_token(pin_id: str) -> str | None:
+        entry = _pin_tokens.get(str(pin_id))
+        if entry is None:
+            return None
+        token, ts = entry
+        if time.monotonic() - ts > PIN_TTL:
+            _pin_tokens.pop(str(pin_id), None)
+            return None
+        return token
 
     def _auth() -> Any:
         if plex_auth is not None:
@@ -188,12 +236,12 @@ def create_webui_router(
     async def plex_pin_poll(pin_id: str) -> Response:
         token = _auth().poll_pin(pin_id)
         if token:
-            _pin_tokens[str(pin_id)] = token
+            _store_pin_token(pin_id, token)
         return JSONResponse({"authorized": bool(token)})
 
     @router.get("/api/plex/servers")
     async def plex_servers(pin_id: str) -> Response:
-        token = _pin_tokens.get(str(pin_id))
+        token = _get_pin_token(pin_id)
         if not token:
             return JSONResponse({"error": "Not authorized yet"}, status_code=409)
         return JSONResponse({"servers": _auth().list_servers(token)})
@@ -203,7 +251,7 @@ def create_webui_router(
         body = await request.json()
         pin_id = str(body.get("pin_id", ""))
         uri = body.get("uri")
-        token = _pin_tokens.get(pin_id)
+        token = _get_pin_token(pin_id)
         if not token or not uri:
             return JSONResponse({"error": "Missing token or uri"}, status_code=400)
 
