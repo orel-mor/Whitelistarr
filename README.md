@@ -106,7 +106,7 @@ services:
       # Labeling
       FEATURE_WEBHOOK: "true"
       FEATURE_SWEEP: "true"
-      SWEEP_INTERVAL_MINUTES: "60"
+      SWEEP_CRON: "0 * * * *" # hourly
 
       # Watched / stale notifications (Tautulli + Apprise)
       FEATURE_NOTIFY: "true"
@@ -117,7 +117,7 @@ services:
       WATCHED_PERCENT: "85"
       STALE_AFTER_DAYS: "180"
       UNWATCHED_AFTER_DAYS: "90"
-      WATCH_SCAN_INTERVAL_MINUTES: "360"
+      WATCH_SCAN_CRON: "0 3 * * *" # daily 3am
 
       # Web UI (served at http://host:8000/ on the same port)
       FEATURE_UI: "true"
@@ -179,9 +179,9 @@ In **Seerr → Settings → Notifications → Webhook**:
 
 ### Option C — no webhook
 
-Leave `FEATURE_SWEEP=true` and lower `SWEEP_INTERVAL_MINUTES` (for example to `5`).
-The reconcile sweep then picks up new items within that window — simplest to
-operate, at the cost of a little latency.
+Leave `FEATURE_SWEEP=true` and set a tighter `SWEEP_CRON` (for example
+`*/5 * * * *`, every 5 minutes). The reconcile sweep then picks up new items
+within that window — simplest to operate, at the cost of a little latency.
 
 ## Restricting a shared user to the label
 
@@ -201,6 +201,9 @@ With `FEATURE_UI=true` and a `PAL_SECRET_KEY` set, a config UI is served at
 a grouped, dependency-aware form, plus an **Actions** panel (send a test
 notification, run the sweep now, run reverse).
 
+- **Sign in with Plex.** Instead of pasting a token, use the sign-in flow: it
+  opens plex.tv, you authorize, then pick your server from the detected list —
+  Whitelistarr fills in both the Plex URL and token for you.
 - **First run** seeds the config from your environment variables. After that the
   **saved config is the source of truth** and the environment becomes a fallback.
 - **Secrets** (tokens and API keys) are stored **encrypted** with
@@ -209,7 +212,12 @@ notification, run the sweep now, run reverse).
   openssl rand -base64 32 | tr '+/' '-_'
   # or: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
   ```
-- **Changes apply on restart** — saving shows a "restart to apply" banner.
+- **Changes apply live** — saving rebuilds the running clients and scheduler in
+  place, no container restart. The exception is the bootstrap settings
+  (`PAL_SECRET_KEY`, `CONFIG_PATH`, `STATE_DB_PATH`, `FEATURE_UI`, `WEBHOOK_HOST`,
+  `WEBHOOK_PORT`); changing one shows a "restart to apply" banner for that field.
+  If a save can't connect (e.g. a bad Plex token), the previous config keeps
+  running and the UI shows the error.
 - **No built-in authentication.** The UI can edit secrets, so keep it behind a
   reverse proxy or on a trusted network. Secrets are never returned to the browser
   in plaintext, and the config file is encrypted at rest. Set `FEATURE_UI=false`
@@ -232,9 +240,10 @@ Choose which events notify via `NOTIFY_ON`:
   `UNWATCHED_AFTER_DAYS`. Requires Tautulli and `FEATURE_NOTIFY=true`.
 
 With `DRY_RUN=true`, notifications are logged but not sent. To confirm your
-channels work, set `NOTIFY_TEST_ON_START=true` — the app sends one real test
-message at startup (this ignores `DRY_RUN`). The startup log reports how many
-Apprise channels loaded, e.g. `Notifications: 2/2 Apprise channel(s) loaded`.
+channels work, use the **Send test notification** button in the web UI's Actions
+panel — it sends one real test message (ignoring `DRY_RUN`). The startup log also
+reports how many Apprise channels loaded, e.g. `Notifications: 2/2 Apprise
+channel(s) loaded`.
 
 ## Removing all labels
 
@@ -251,40 +260,58 @@ docker run --rm --env-file .env -e REVERSE=true orelmor/whitelistarr:latest
 
 ## Configuration reference
 
+Settings come in three tiers. **Bootstrap** is read from the environment only and
+needs a restart to change. **Core** + **Advanced** can be set in the env (for a
+declarative deploy) or in the web UI, where they apply live.
+
+**Bootstrap (env-only, restart-required)**
+
 | Variable | Default | Description |
 |---|---|---|
-| `PLEX_URL` / `PLEX_TOKEN` | — | Plex server and auth token |
-| `PLEX_SECTIONS` | *(all)* | CSV of movie/show section names to process |
-| `PLEX_DEVICE_NAME` | `Whitelistarr` | Device name shown in Plex → Settings → Devices |
-| `PLEX_CLIENT_ID` | `whitelistarr` | Stable client id (avoids a new Plex device per restart) |
+| `PAL_SECRET_KEY` | — | Fernet key; required when the UI is on (encrypts secrets at rest) |
+| `FEATURE_UI` | `true` | Serve the config web UI at `/` (same port) |
+| `CONFIG_PATH` | `/data/config.json` | Where the UI persists config |
+| `STATE_DB_PATH` | `/data/state.db` | SQLite dedup database path |
+| `WEBHOOK_HOST` / `WEBHOOK_PORT` | `0.0.0.0` / `8000` | Webhook bind address |
+
+**Core**
+
+| Variable | Default | Description |
+|---|---|---|
+| `PLEX_URL` / `PLEX_TOKEN` | — | Plex server and auth token (or use "Sign in with Plex" in the UI) |
 | `RADARR_URL` / `RADARR_API_KEY` | — | Radarr connection |
 | `SONARR_URL` / `SONARR_API_KEY` | — | Sonarr connection |
+| `TAG_LABEL_MAP` | — | `tag:label,tag:label` — which \*arr tags become which Plex labels |
+| `SWEEP_CRON` | `0 * * * *` | Sweep schedule (5-field cron); hourly by default |
+| `WATCH_SCAN_CRON` | `0 3 * * *` | Watch-history scan schedule (cron); daily 3am |
+| `FEATURE_NOTIFY` | `false` | Enable watched/stale notifications |
 | `SEERR_URL` / `SEERR_API_KEY` | — | Seerr connection (`OVERSEERR_*` also accepted) |
 | `TAUTULLI_URL` / `TAUTULLI_API_KEY` | — | Tautulli (required if `FEATURE_NOTIFY=true`) |
-| `TAG_LABEL_MAP` | — | `tag:label,tag:label` — which \*arr tags become which Plex labels |
+| `APPRISE_URLS` | — | CSV of [Apprise URLs](https://github.com/caronc/apprise/wiki) |
+| `NOTIFY_ON` | `watched,stale` | Events to notify on: `labeled`, `watched`, `stale` |
+
+> The legacy `SWEEP_INTERVAL_MINUTES` / `WATCH_SCAN_INTERVAL_MINUTES` are still
+> accepted and auto-migrated to the matching `*_CRON` value on load.
+
+**Advanced overrides** (sane defaults; rarely changed)
+
+| Variable | Default | Description |
+|---|---|---|
+| `PLEX_SECTIONS` | *(all)* | CSV of movie/show section names to process |
+| `PLEX_DEVICE_NAME` | `Whitelistarr` | Device name shown in Plex → Settings → Devices |
+| `PLEX_CLIENT_ID` | *(generated)* | Stable client id; auto-generated and persisted on first run |
 | `LABEL_REMOVAL` | `reconcile` | `reconcile` (add + remove) or `add-only` |
 | `FEATURE_WEBHOOK` | `true` | Run the Seerr webhook receiver |
 | `FEATURE_SWEEP` | `true` | Run the periodic reconcile sweep |
-| `SWEEP_INTERVAL_MINUTES` | `60` | Sweep cadence |
-| `FEATURE_NOTIFY` | `false` | Enable watched/stale notifications |
-| `WATCH_SCAN_INTERVAL_MINUTES` | `360` | Watch-history scan cadence |
-| `APPRISE_URLS` | — | CSV of [Apprise URLs](https://github.com/caronc/apprise/wiki) |
-| `NOTIFY_ON` | `watched,stale` | Events to notify on: `labeled`, `watched`, `stale` |
-| `NOTIFY_TEST_ON_START` | `false` | Send one real test notification at startup (ignores `DRY_RUN`) |
 | `WATCHED_PERCENT` | `85` | Percent watched that counts as "finished" |
 | `STALE_AFTER_DAYS` | `180` | Age before an item can be "stale" |
 | `UNWATCHED_AFTER_DAYS` | `90` | No-watch window for "stale" |
-| `FEATURE_UI` | `true` | Serve the config web UI at `/` (same port) |
-| `PAL_SECRET_KEY` | — | Fernet key; required when the UI is on (encrypts secrets at rest) |
-| `CONFIG_PATH` | `/data/config.json` | Where the UI persists config |
-| `WEBHOOK_HOST` / `WEBHOOK_PORT` | `0.0.0.0` / `8000` | Webhook bind address |
 | `WEBHOOK_PATH` | `/webhook/seerr` | Seerr webhook route |
 | `PLEX_WEBHOOK_PATH` | `/webhook/plex` | Plex webhook route (Plex Pass) |
 | `WEBHOOK_SECRET` | — | Optional `?token=` shared secret |
 | `DRY_RUN` | `false` | Log intended changes without applying them |
 | `REVERSE` | `false` | One-shot: remove all managed labels from every item, then exit |
 | `LOG_LEVEL` | `info` | Logging level |
-| `STATE_DB_PATH` | `/data/state.db` | SQLite dedup database path |
 | `TZ` | `UTC` | Container timezone |
 | `PUID` / `PGID` | `1000` / `1000` | User/group the container drops to (starts as root, fixes `/data` ownership, then runs unprivileged) |
 

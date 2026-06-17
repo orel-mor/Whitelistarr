@@ -11,6 +11,7 @@ from typing import Any
 
 from app import __version__
 from app.config import Settings, load_settings
+from app.runtime import Runtime
 from app.scheduler import Scheduler, build_scheduler
 
 log = logging.getLogger(__name__)
@@ -137,33 +138,30 @@ def create_application(settings: Settings) -> Any:
             "; ".join(settings.runtime_errors()),
         )
 
+    runtime = Runtime(settings, components)
+
     webui_router = None
     if _ui_enabled(settings):
         from app.configstore import ConfigStore
         from app.webui import create_webui_router
 
-        ls = components.label_sync if components else None
         webui_router = create_webui_router(
-            settings=settings,
+            runtime=runtime,
             store=ConfigStore(settings.config_path, settings.pal_secret_key),
-            on_sweep=(ls.sweep if ls else None),
-            on_reverse=(ls.reverse_sweep if ls else None),
-            on_test=((lambda: _send_test_notification(settings)) if settings.apprise_url_list else None),
         )
 
     @contextlib.asynccontextmanager
     async def lifespan(app: Any):
-        if components:
-            components.scheduler.start()
-            log.info("Scheduler started (%d jobs)", len(components.scheduler.jobs()))
+        runtime.start()
+        if runtime.components:
+            log.info("Scheduler started (%d jobs)", len(runtime.components.scheduler.jobs()))
         try:
             yield
         finally:
-            if components:
-                components.scheduler.shutdown()
+            runtime.shutdown()
 
     return create_app(
-        components.label_sync if components else None,
+        get_sync=lambda: runtime.label_sync,
         webhook_path=settings.webhook_path,
         plex_webhook_path=settings.plex_webhook_path,
         secret=settings.webhook_secret,
@@ -238,11 +236,11 @@ def run() -> None:
 
     configured = not settings.runtime_errors()
     log.info(
-        "Config: ui=%s webhook=%s sweep=%s(%dm) notify=%s mode=%s labels=%s configured=%s",
+        "Config: ui=%s webhook=%s sweep=%s(%s) notify=%s mode=%s labels=%s configured=%s",
         ui_enabled,
         settings.feature_webhook,
         settings.feature_sweep,
-        settings.sweep_interval_minutes,
+        settings.sweep_cron,
         settings.feature_notify,
         settings.label_removal,
         sorted(settings.managed_labels),
@@ -251,9 +249,6 @@ def run() -> None:
 
     if settings.dry_run:
         log.warning("DRY_RUN enabled: no Plex labels or notifications will be applied.")
-
-    if configured and settings.feature_notify and settings.notify_test_on_start:
-        _send_test_notification(settings)
 
     # Serve HTTP if the UI or the webhook receiver is on; otherwise run headless.
     if ui_enabled or settings.feature_webhook:

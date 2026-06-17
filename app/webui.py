@@ -7,7 +7,6 @@ is easy to test and the app can serve the UI even when nothing is configured yet
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -39,11 +38,9 @@ def _static_response(name: str) -> Response:
 
 
 def create_webui_router(
-    settings: Settings,
+    runtime: Any,
     store: Any,
-    on_sweep: Callable[[], dict] | None = None,
-    on_reverse: Callable[[], dict] | None = None,
-    on_test: Callable[[], bool] | None = None,
+    plex_auth: Any | None = None,
 ) -> APIRouter:
     router = APIRouter()
     keys = set(field_keys())
@@ -63,6 +60,7 @@ def create_webui_router(
 
     @router.get("/api/config")
     async def get_config() -> dict:
+        settings = runtime.settings
         saved = store.load() if store and store.exists() else {}
         values: dict[str, Any] = {}
         for key in keys:
@@ -86,23 +84,32 @@ def create_webui_router(
                 candidate[key] = value
 
         try:
-            tentative = Settings(**candidate)
+            new_settings = Settings(**candidate)
         except ValidationError as exc:
             messages = [f"{e['loc'][0]}: {e['msg']}" for e in exc.errors()]
             return JSONResponse({"errors": messages}, status_code=422)
 
         store.save(candidate)
-        return {"ok": True, "restart_required": True, "warnings": tentative.runtime_errors()}
+        result = runtime.reload(new_settings)
+        return {
+            "ok": result.ok,
+            "error": result.error,
+            "restart_required": result.restart_required,
+            "restart_fields": result.restart_fields or [],
+            "warnings": new_settings.runtime_errors(),
+        }
 
     @router.post("/api/actions/sweep")
     async def action_sweep() -> Response:
-        if on_sweep is None:
+        ls = runtime.label_sync
+        if ls is None:
             return JSONResponse({"error": "Not configured"}, status_code=409)
-        return JSONResponse(on_sweep())
+        return JSONResponse(ls.sweep())
 
     @router.post("/api/actions/reverse")
     async def action_reverse(request: Request) -> Response:
-        if on_reverse is None:
+        ls = runtime.label_sync
+        if ls is None:
             return JSONResponse({"error": "Not configured"}, status_code=409)
         try:
             body = await request.json()
@@ -110,12 +117,64 @@ def create_webui_router(
             body = {}
         if not body.get("confirm"):
             return JSONResponse({"error": "confirm required"}, status_code=400)
-        return JSONResponse(on_reverse())
+        return JSONResponse(ls.reverse_sweep())
 
     @router.post("/api/actions/test-notification")
     async def action_test() -> Response:
-        if on_test is None:
+        from app.main import _send_test_notification
+
+        settings = runtime.settings
+        if not settings.apprise_url_list:
             return JSONResponse({"error": "Not configured"}, status_code=409)
-        return JSONResponse({"ok": bool(on_test())})
+        return JSONResponse({"ok": bool(_send_test_notification(settings))})
+
+    # pin_id -> auth token, held server-side only (never sent to the browser).
+    _pin_tokens: dict[str, str] = {}
+
+    def _auth() -> Any:
+        if plex_auth is not None:
+            return plex_auth
+        from app.clients.plex_auth import PlexAuth
+
+        return PlexAuth(client_id=runtime.settings.plex_client_id)
+
+    @router.post("/api/plex/pin")
+    async def plex_pin() -> Response:
+        return JSONResponse(_auth().create_pin())
+
+    @router.get("/api/plex/pin/{pin_id}")
+    async def plex_pin_poll(pin_id: str) -> Response:
+        token = _auth().poll_pin(pin_id)
+        if token:
+            _pin_tokens[str(pin_id)] = token
+        return JSONResponse({"authorized": bool(token)})
+
+    @router.get("/api/plex/servers")
+    async def plex_servers(pin_id: str) -> Response:
+        token = _pin_tokens.get(str(pin_id))
+        if not token:
+            return JSONResponse({"error": "Not authorized yet"}, status_code=409)
+        return JSONResponse({"servers": _auth().list_servers(token)})
+
+    @router.post("/api/plex/apply")
+    async def plex_apply(request: Request) -> Response:
+        body = await request.json()
+        pin_id = str(body.get("pin_id", ""))
+        uri = body.get("uri")
+        token = _pin_tokens.get(pin_id)
+        if not token or not uri:
+            return JSONResponse({"error": "Missing token or uri"}, status_code=400)
+
+        candidate = store.load() if store and store.exists() else {}
+        candidate["plex_url"] = uri
+        candidate["plex_token"] = token
+        store.save(candidate)
+        _pin_tokens.pop(pin_id, None)  # one-time use
+
+        result = runtime.reload(Settings(**candidate))
+        return JSONResponse(
+            {"ok": result.ok, "error": result.error,
+             "restart_required": result.restart_required}
+        )
 
     return router

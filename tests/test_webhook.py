@@ -21,12 +21,22 @@ class FakeSync:
 
 def _client(sync, secret=""):
     app = create_app(
-        sync,
+        lambda: sync,
         webhook_path="/webhook/seerr",
         plex_webhook_path="/webhook/plex",
         secret=secret,
     )
     return TestClient(app)
+
+
+def test_webhook_503_when_unconfigured():
+    app = create_app(lambda: None, webhook_path="/webhook/seerr",
+                     plex_webhook_path="/webhook/plex")
+    client = TestClient(app)
+    resp = client.post("/webhook/seerr",
+                       json={"notification_type": "MEDIA_AVAILABLE",
+                             "media": {"media_type": "movie", "tmdbId": "1"}})
+    assert resp.status_code == 503
 
 
 class TestParsePayload:

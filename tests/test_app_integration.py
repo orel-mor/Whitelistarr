@@ -44,8 +44,9 @@ def test_save_config_via_api_persists(monkeypatch, tmp_path):
             "tag_label_map": "kids:kids",
         })
         assert resp.status_code == 200
-        assert resp.json()["restart_required"] is True
-        # reflected back, secret masked
+        # plex_url/token are managed-tier -> not restart-required
+        assert resp.json()["restart_required"] is False
+        # persisted + secret masked regardless of whether live reload connected
         values = client.get("/api/config").json()["values"]
         assert values["plex_url"] == "http://plex:32400"
         assert values["plex_token"] == {"set": True}

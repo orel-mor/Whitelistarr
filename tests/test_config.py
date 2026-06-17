@@ -1,6 +1,12 @@
 import pytest
 
-from app.config import Settings, parse_csv, parse_tag_label_map
+from app.config import (
+    Settings,
+    is_valid_cron,
+    minutes_to_cron,
+    parse_csv,
+    parse_tag_label_map,
+)
 
 
 class TestParseTagLabelMap:
@@ -32,6 +38,28 @@ class TestParseTagLabelMap:
             parse_tag_label_map(":label")
         with pytest.raises(ValueError):
             parse_tag_label_map("tag:")
+
+
+class TestMinutesToCron:
+    def test_60_is_hourly(self):
+        assert minutes_to_cron(60) == "0 * * * *"
+
+    def test_360_is_every_6_hours(self):
+        assert minutes_to_cron(360) == "0 */6 * * *"
+
+    def test_sub_hour_divisor_is_minute_interval(self):
+        assert minutes_to_cron(30) == "*/30 * * * *"
+
+    def test_non_divisor_is_minute_interval(self):
+        assert minutes_to_cron(45) == "*/45 * * * *"
+
+
+class TestCronValidation:
+    def test_accepts_valid(self):
+        assert is_valid_cron("0 * * * *") is True
+
+    def test_rejects_garbage(self):
+        assert is_valid_cron("not a cron") is False
 
 
 class TestParseCsv:
@@ -95,8 +123,13 @@ class TestSettings:
         s = Settings()
         assert s.label_removal == "reconcile"
         assert s.dry_run is False
-        assert s.sweep_interval_minutes == 60
+        assert s.sweep_cron == "0 * * * *"
         assert s.watched_percent == 85
+
+    def test_notify_test_on_start_removed(self, monkeypatch):
+        for k, v in _base_env().items():
+            monkeypatch.setenv(k, v)
+        assert not hasattr(Settings(), "notify_test_on_start")
 
     def test_notify_requires_tautulli(self, monkeypatch):
         env = _base_env(FEATURE_NOTIFY="true", APPRISE_URLS="json://x")
@@ -139,3 +172,28 @@ class TestSettings:
         s.validate_runtime()  # should not raise
         assert s.apprise_url_list == ["json://localhost"]
         assert s.notify_events == ["watched", "stale"]
+
+
+class TestCronMigration:
+    def test_legacy_minutes_translate_to_cron(self, monkeypatch):
+        for k, v in _base_env(SWEEP_INTERVAL_MINUTES="30").items():
+            monkeypatch.setenv(k, v)
+        assert Settings().sweep_cron == "*/30 * * * *"
+
+    def test_cron_wins_when_both_set(self, monkeypatch):
+        env = _base_env(SWEEP_INTERVAL_MINUTES="30", SWEEP_CRON="0 2 * * *")
+        for k, v in env.items():
+            monkeypatch.setenv(k, v)
+        assert Settings().sweep_cron == "0 2 * * *"
+
+    def test_cron_defaults(self, monkeypatch):
+        for k, v in _base_env().items():
+            monkeypatch.setenv(k, v)
+        s = Settings()
+        assert s.sweep_cron == "0 * * * *"
+        assert s.watch_scan_cron == "0 3 * * *"
+
+    def test_invalid_cron_flagged_by_runtime_errors(self, monkeypatch):
+        for k, v in _base_env(SWEEP_CRON="bogus").items():
+            monkeypatch.setenv(k, v)
+        assert any("cron" in e.lower() for e in Settings().runtime_errors())
