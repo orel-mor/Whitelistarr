@@ -128,4 +128,53 @@ def create_webui_router(
             return JSONResponse({"error": "Not configured"}, status_code=409)
         return JSONResponse({"ok": bool(_send_test_notification(settings))})
 
+    # pin_id -> auth token, held server-side only (never sent to the browser).
+    _pin_tokens: dict[str, str] = {}
+
+    def _auth() -> Any:
+        if plex_auth is not None:
+            return plex_auth
+        from app.clients.plex_auth import PlexAuth
+
+        return PlexAuth(client_id=runtime.settings.plex_client_id)
+
+    @router.post("/api/plex/pin")
+    async def plex_pin() -> Response:
+        return JSONResponse(_auth().create_pin())
+
+    @router.get("/api/plex/pin/{pin_id}")
+    async def plex_pin_poll(pin_id: str) -> Response:
+        token = _auth().poll_pin(pin_id)
+        if token:
+            _pin_tokens[str(pin_id)] = token
+        return JSONResponse({"authorized": bool(token)})
+
+    @router.get("/api/plex/servers")
+    async def plex_servers(pin_id: str) -> Response:
+        token = _pin_tokens.get(str(pin_id))
+        if not token:
+            return JSONResponse({"error": "Not authorized yet"}, status_code=409)
+        return JSONResponse({"servers": _auth().list_servers(token)})
+
+    @router.post("/api/plex/apply")
+    async def plex_apply(request: Request) -> Response:
+        body = await request.json()
+        pin_id = str(body.get("pin_id", ""))
+        uri = body.get("uri")
+        token = _pin_tokens.get(pin_id)
+        if not token or not uri:
+            return JSONResponse({"error": "Missing token or uri"}, status_code=400)
+
+        candidate = store.load() if store and store.exists() else {}
+        candidate["plex_url"] = uri
+        candidate["plex_token"] = token
+        store.save(candidate)
+        _pin_tokens.pop(pin_id, None)  # one-time use
+
+        result = runtime.reload(Settings(**candidate))
+        return JSONResponse(
+            {"ok": result.ok, "error": result.error,
+             "restart_required": result.restart_required}
+        )
+
     return router

@@ -124,6 +124,65 @@ def test_action_reverse_requires_confirm(tmp_path):
     assert client.post("/api/actions/reverse", json={"confirm": True}).status_code == 200
 
 
+class FakePlexAuth:
+    def __init__(self):
+        self.applied = None
+
+    def create_pin(self):
+        return {"id": 99, "code": "cc", "authUrl": "https://app.plex.tv/auth#?code=cc"}
+
+    def poll_pin(self, pin_id):
+        return "tok-secret" if str(pin_id) == "99" else None
+
+    def list_servers(self, token):
+        assert token == "tok-secret"
+        return [{"name": "Home", "clientIdentifier": "s1",
+                 "connections": [{"uri": "http://192.168.1.2:32400", "local": True}]}]
+
+
+def _plex_client(tmp_path):
+    store = ConfigStore(str(tmp_path / "config.json"), KEY)
+    settings = Settings(plex_client_id="cid")
+    runtime = FakeRuntime(settings)
+    auth = FakePlexAuth()
+    app = FastAPI()
+    app.include_router(create_webui_router(runtime=runtime, store=store, plex_auth=auth))
+    return TestClient(app), store, runtime
+
+
+def test_plex_pin_create(tmp_path):
+    client, _, _ = _plex_client(tmp_path)
+    resp = client.post("/api/plex/pin")
+    assert resp.status_code == 200
+    assert resp.json()["id"] == 99
+    assert "authUrl" in resp.json()
+
+
+def test_plex_poll_authorizes_without_leaking_token(tmp_path):
+    client, _, _ = _plex_client(tmp_path)
+    client.post("/api/plex/pin")
+    resp = client.get("/api/plex/pin/99")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["authorized"] is True
+    assert "tok-secret" not in resp.text  # token never returned to browser
+
+
+def test_plex_servers_then_apply_writes_url_and_token(tmp_path):
+    client, store, runtime = _plex_client(tmp_path)
+    client.post("/api/plex/pin")
+    client.get("/api/plex/pin/99")  # caches token server-side
+    servers = client.get("/api/plex/servers?pin_id=99").json()
+    assert servers["servers"][0]["name"] == "Home"
+    resp = client.post("/api/plex/apply",
+                       json={"pin_id": 99, "uri": "http://192.168.1.2:32400"})
+    assert resp.status_code == 200
+    saved = store.load()
+    assert saved["plex_url"] == "http://192.168.1.2:32400"
+    assert saved["plex_token"] == "tok-secret"  # decrypts back via store.load()
+    assert runtime.reloaded_with is not None
+
+
 def test_static_serves_packaged_files(tmp_path):
     client, _, _ = _client(tmp_path)
     for name in ("index.html", "app.js", "style.css"):
