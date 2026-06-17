@@ -232,8 +232,9 @@ Details:
   running and the UI shows the error.
 - **No built-in authentication.** The UI can edit secrets, so keep it behind a
   reverse proxy or on a trusted network. Secrets are never returned to the browser
-  in plaintext, and the config file is encrypted at rest. Set `FEATURE_UI=false`
-  to disable it.
+  in plaintext, and the config file is encrypted at rest. Mutating `/api` requests
+  from a foreign origin are rejected (a basic cross-origin guard), but that is not
+  a substitute for putting auth in front. Set `FEATURE_UI=false` to disable the UI.
 
 If `FEATURE_UI=true` but `PAL_SECRET_KEY` is unset, the UI is disabled and the app
 runs from environment variables.
