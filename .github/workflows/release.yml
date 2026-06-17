@@ -95,7 +95,7 @@ jobs:
           github_token: ${{ secrets.GH_PAT }}
           tag: ${{ steps.release.outputs.tag }}
 
-      - name: Label released PR
+      - name: Label released PR + issues
         if: steps.release.outputs.released == 'true'
         uses: actions/github-script@v9
         env:
@@ -105,15 +105,32 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const version = process.env.VERSION;
+            const note = `🚀 Released in **v${version}** — image \`orelmor/whitelistarr:latest\` + \`:${version}\`.`;
             async function ensureLabel(name, color, description) {
               try { await github.rest.issues.getLabel({ owner, repo, name }); }
               catch (e) { if (e.status === 404) await github.rest.issues.createLabel({ owner, repo, name, color, description }); }
             }
-            await ensureLabel('latest', '0e8a16', 'Shipped in the latest / stable channel (image :latest)');
+            async function mark(number) {
+              await github.rest.issues.addLabels({ owner, repo, issue_number: number, labels: ['released'] });
+              await github.rest.issues.createComment({ owner, repo, issue_number: number, body: note });
+            }
+            await ensureLabel('released', '0e8a16', 'Shipped in a stable release');
+
             const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner, repo, commit_sha: context.sha });
+            const seen = new Set();
             for (const pr of prs) {
-              await github.rest.issues.addLabels({ owner, repo, issue_number: pr.number, labels: ['latest'] });
-              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body: `🚀 Released in **v${version}** — image \`orelmor/whitelistarr:latest\` + \`:${version}\`.` });
+              await mark(pr.number);
+              // Issues this PR closed via "Closes #N" — label + note them too.
+              const q = await github.graphql(
+                `query($owner:String!,$repo:String!,$pr:Int!){
+                   repository(owner:$owner,name:$repo){
+                     pullRequest(number:$pr){ closingIssuesReferences(first:50){ nodes{ number } } } } }`,
+                { owner, repo, pr: pr.number });
+              for (const issue of q.repository.pullRequest.closingIssuesReferences.nodes) {
+                if (seen.has(issue.number)) continue;
+                seen.add(issue.number);
+                await mark(issue.number);
+              }
             }
 
       - name: Notify (Apprise / Discord)
