@@ -196,10 +196,22 @@ This is the step that actually gates access (requires Plex Pass on your account)
 
 ## Web UI
 
-With `FEATURE_UI=true` and a `PAL_SECRET_KEY` set, a config UI is served at
-`http://<host>:8000/` (the same port as the webhooks). It exposes every setting in
-a grouped, dependency-aware form, plus an **Actions** panel (send a test
-notification, run the sweep now, run reverse).
+With `FEATURE_UI=true` and a `PAL_SECRET_KEY` set, a web UI is served at
+`http://<host>:8000/` (the same port as the webhooks). It's a small single-page
+app (vendored [Alpine.js](https://alpinejs.dev/) — no build step) with three
+screens:
+
+- **Setup wizard** (first run, when nothing is configured yet): sign in with
+  Plex, connect Radarr/Sonarr with live connection tests, set your tag → label
+  map, done. It hands off to the Status screen.
+- **Status**: job schedule with next-run times, recent sweep/scan activity, live
+  per-service connection health, and the actions (run sweep, send test
+  notification, run reverse).
+- **Settings**: every setting grouped, with **Core** shown and **Advanced**
+  behind a toggle. Schedules use preset chips (Hourly / Every 6h / Daily / …) or
+  a custom cron expression.
+
+Details:
 
 - **Sign in with Plex.** Instead of pasting a token, use the sign-in flow: it
   opens plex.tv, you authorize, then pick your server from the detected list —
