@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
-from app.clients.base import HttpClient
+from app.clients.base import PROBE_TIMEOUT, HttpClient
 from app.core.matching import guid_key
 
 
@@ -32,7 +32,7 @@ class ArrClient:
     def check(self) -> dict[str, Any]:
         """Probe reachability/auth via /api/v3/system/status."""
         try:
-            data = self._http.get_json("/api/v3/system/status")
+            data = self._http.get_json("/api/v3/system/status", timeout=PROBE_TIMEOUT)
         except Exception as exc:  # noqa: BLE001 - report any failure as not-ok
             return {"ok": False, "detail": str(exc)}
         name = data.get("appName") or "OK"

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.clients.base import HttpClient
+from httpx import USE_CLIENT_DEFAULT
+
+from app.clients.base import PROBE_TIMEOUT, HttpClient
 
 
 class TautulliError(RuntimeError):
@@ -16,10 +18,10 @@ class TautulliClient:
         self._api_key = api_key
         self._http = HttpClient(base_url)
 
-    def _command(self, cmd: str, **params: Any) -> Any:
+    def _command(self, cmd: str, *, timeout: Any = USE_CLIENT_DEFAULT, **params: Any) -> Any:
         query = {"apikey": self._api_key, "cmd": cmd}
         query.update({k: v for k, v in params.items() if v is not None})
-        payload = self._http.get_json("/api/v2", params=query)
+        payload = self._http.get_json("/api/v2", params=query, timeout=timeout)
         response = payload.get("response", {})
         if response.get("result") != "success":
             raise TautulliError(response.get("message") or f"Tautulli {cmd} failed")
@@ -43,7 +45,7 @@ class TautulliClient:
 
     def check(self) -> dict:
         try:
-            data = self._command("get_server_info")
+            data = self._command("get_server_info", timeout=PROBE_TIMEOUT)
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "detail": str(exc)}
         name = (data or {}).get("pms_name") or "OK"

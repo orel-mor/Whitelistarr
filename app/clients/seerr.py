@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 
-from app.clients.base import HttpClient
+from app.clients.base import PROBE_TIMEOUT, HttpClient
 
 PAGE_SIZE = 50
 
@@ -41,7 +41,7 @@ class SeerrClient:
 
     def check(self) -> dict:
         try:
-            data = self._http.get_json("/api/v1/status")
+            data = self._http.get_json("/api/v1/status", timeout=PROBE_TIMEOUT)
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "detail": str(exc)}
         return {"ok": True, "detail": f"v{data.get('version', 'OK')}"}
