@@ -62,3 +62,70 @@ input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); bo
 .errors { background: #2a1512; color: var(--danger); border-bottom: 1px solid var(--border); }
 .errors ul { margin: 6px 0 0; padding-left: 18px; }
 .hidden { display: none; }
+
+/* ---- app shell ---------------------------------------------------------- */
+.app { display: flex; min-height: 100vh; }
+.sidebar {
+  width: 220px; flex: 0 0 220px; background: var(--card); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; padding: 18px 14px; position: sticky; top: 0; height: 100vh;
+}
+.sidebar .brand { font-weight: 700; color: var(--accent); font-size: 17px; padding: 4px 8px 16px; }
+.sidebar nav { display: flex; flex-direction: column; gap: 4px; }
+.sidebar nav a {
+  color: var(--text); text-decoration: none; padding: 9px 12px; border-radius: 8px; font-size: 14px;
+}
+.sidebar nav a:hover { background: var(--card2); }
+.sidebar nav a.active { background: var(--card2); color: var(--accent); font-weight: 600; }
+.sidebar-foot { margin-top: auto; padding: 8px; font-size: 12px; line-height: 1.4; }
+.app main { max-width: 860px; margin: 0; padding: 28px 32px; flex: 1; }
+.page-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.page-head h1 { font-size: 20px; margin: 0; }
+.adv-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.adv-toggle input { width: 16px; height: 16px; accent-color: var(--accent); }
+.groups { display: block; }
+.group {
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 18px 20px; margin-bottom: 16px;
+}
+.group h2 { margin: 0 0 14px; font-size: 14px; color: var(--accent); letter-spacing: .3px; }
+
+/* ---- cron presets ------------------------------------------------------- */
+.cron-presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.chip {
+  background: var(--card2); color: var(--text); border: 1px solid var(--border);
+  border-radius: 999px; padding: 5px 13px; font: inherit; font-size: 13px; cursor: pointer;
+}
+.chip:hover { border-color: var(--accent); }
+.chip.active { background: var(--accent); color: #1a1205; border-color: var(--accent); font-weight: 600; }
+.cron-custom.hidden { display: none; }
+.cron-echo { margin-top: 6px; }
+
+/* ---- toasts ------------------------------------------------------------- */
+.toasts { position: fixed; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 10px; z-index: 50; }
+.toast {
+  padding: 11px 16px; border-radius: 10px; font-size: 14px; max-width: 360px;
+  border: 1px solid var(--border); background: var(--card2); box-shadow: 0 6px 20px rgba(0,0,0,.35);
+  animation: toast-in .15s ease-out;
+}
+.toast.ok { border-color: var(--ok); }
+.toast.warn { border-color: var(--accent); }
+.toast.err { border-color: var(--danger); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ---- status pills + cards ---------------------------------------------- */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.pill::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.pill.ok::before { background: var(--ok); }
+.pill.warn::before { background: var(--accent); }
+.pill.err::before { background: var(--danger); }
+
+/* ---- responsive --------------------------------------------------------- */
+@media (max-width: 720px) {
+  .app { flex-direction: column; }
+  .sidebar { width: auto; flex: none; height: auto; position: static; flex-direction: row;
+    align-items: center; gap: 8px; }
+  .sidebar nav { flex-direction: row; }
+  .sidebar-foot { display: none; }
+  .app main { padding: 20px 16px; }
+}

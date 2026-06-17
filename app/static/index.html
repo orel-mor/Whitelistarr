@@ -38,8 +38,18 @@
           <p class="muted">Status loads here.</p>
         </section>
         <section x-show="$store.app.route==='settings'" x-data="settings()" x-init="load()">
-          <h1>Settings</h1>
-          <p class="muted">Settings load here.</p>
+          <header class="page-head">
+            <h1>Settings</h1>
+            <label class="adv-toggle">
+              <input type="checkbox" x-model="showAdvanced" /> Show advanced
+            </label>
+          </header>
+          <div x-ref="core" class="groups"></div>
+          <div x-ref="adv" class="groups" x-show="showAdvanced"></div>
+          <div class="savebar">
+            <span class="muted" x-text="saving ? 'Saving…' : ''"></span>
+            <button class="btn primary" @click="save()">Save</button>
+          </div>
         </section>
       </main>
     </div>
