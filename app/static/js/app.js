@@ -218,7 +218,13 @@ document.addEventListener("alpine:init", () => {
     cronHuman, relativeTime,
     async start() {
       await this.refresh();
-      this.timer = setInterval(() => this.refresh(), 10000);
+      // Poll, but only fetch while the Status screen is showing and the tab is
+      // visible — don't hammer /api/status (and the arr/Plex APIs) off-screen.
+      this.timer = setInterval(() => { if (this.active()) this.refresh(); }, 10000);
+      document.addEventListener("visibilitychange", () => { if (this.active()) this.refresh(); });
+    },
+    active() {
+      return this.$store.app.route === "status" && !document.hidden;
     },
     async refresh() {
       const r = await api("/api/status");
