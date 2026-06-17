@@ -168,6 +168,16 @@ def test_plex_poll_authorizes_without_leaking_token(tmp_path):
     assert "tok-secret" not in resp.text  # token never returned to browser
 
 
+def test_plex_pin_token_expires(tmp_path, monkeypatch):
+    import app.webui as webui
+
+    monkeypatch.setattr(webui, "PIN_TTL", -1.0)  # any cached token is already expired
+    client, _, _ = _plex_client(tmp_path)
+    client.post("/api/plex/pin")
+    client.get("/api/plex/pin/99")  # caches token server-side
+    assert client.get("/api/plex/servers?pin_id=99").status_code == 409
+
+
 def test_plex_servers_then_apply_writes_url_and_token(tmp_path):
     client, store, runtime = _plex_client(tmp_path)
     client.post("/api/plex/pin")

@@ -27,6 +27,9 @@ log = logging.getLogger(__name__)
 # upstream services (or stall when one is unreachable).
 PROBE_TIMEOUT = 5.0
 CONN_CACHE_TTL = 8.0
+# How long a Plex auth token from an in-progress sign-in is kept server-side
+# before an abandoned flow's token is purged.
+PIN_TTL = 600.0
 
 STATIC_DIR = Path(__file__).parent / "static"
 _MEDIA = {".html": "text/html", ".js": "text/javascript", ".css": "text/css"}
@@ -199,8 +202,22 @@ def create_webui_router(
         _, result = await _probe(service, client)
         return JSONResponse(result)
 
-    # pin_id -> auth token, held server-side only (never sent to the browser).
-    _pin_tokens: dict[str, str] = {}
+    # pin_id -> (auth token, stored_at). Held server-side only (never sent to the
+    # browser) and purged after PIN_TTL so an abandoned sign-in doesn't linger.
+    _pin_tokens: dict[str, tuple[str, float]] = {}
+
+    def _store_pin_token(pin_id: str, token: str) -> None:
+        _pin_tokens[str(pin_id)] = (token, time.monotonic())
+
+    def _get_pin_token(pin_id: str) -> str | None:
+        entry = _pin_tokens.get(str(pin_id))
+        if entry is None:
+            return None
+        token, ts = entry
+        if time.monotonic() - ts > PIN_TTL:
+            _pin_tokens.pop(str(pin_id), None)
+            return None
+        return token
 
     def _auth() -> Any:
         if plex_auth is not None:
@@ -217,12 +234,12 @@ def create_webui_router(
     async def plex_pin_poll(pin_id: str) -> Response:
         token = _auth().poll_pin(pin_id)
         if token:
-            _pin_tokens[str(pin_id)] = token
+            _store_pin_token(pin_id, token)
         return JSONResponse({"authorized": bool(token)})
 
     @router.get("/api/plex/servers")
     async def plex_servers(pin_id: str) -> Response:
-        token = _pin_tokens.get(str(pin_id))
+        token = _get_pin_token(pin_id)
         if not token:
             return JSONResponse({"error": "Not authorized yet"}, status_code=409)
         return JSONResponse({"servers": _auth().list_servers(token)})
@@ -232,7 +249,7 @@ def create_webui_router(
         body = await request.json()
         pin_id = str(body.get("pin_id", ""))
         uri = body.get("uri")
-        token = _pin_tokens.get(pin_id)
+        token = _get_pin_token(pin_id)
         if not token or not uri:
             return JSONResponse({"error": "Missing token or uri"}, status_code=400)
 
