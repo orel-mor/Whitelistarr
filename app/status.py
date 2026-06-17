@@ -10,7 +10,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
-_JOBS = ("sweep", "watch_scan")
+_JOBS = ("sweep", "watch_scan", "reactive")
 
 
 class StatusTracker:

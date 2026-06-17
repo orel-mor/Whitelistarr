@@ -148,12 +148,47 @@ def test_status_shape(tmp_path):
     assert "sonarr" not in body["connections"]  # None clients omitted
 
 
+def test_status_includes_readonly_label_map(tmp_path):
+    body = _client(tmp_path).get("/api/status").json()
+    assert body["label_map"] == {"a": "b"}
+
+
 def test_status_unconfigured_no_components(tmp_path):
     body = _client(tmp_path, configured=False, components=False).get("/api/status").json()
     assert body["configured"] is False
     assert body["errors"]
     assert body["jobs"] == []
     assert body["connections"] == {}
+
+
+def test_logs_endpoint_returns_buffered_lines(tmp_path):
+    import logging
+
+    from app.logbuffer import LOG_BUFFER
+
+    LOG_BUFFER.handle(
+        logging.LogRecord("t", logging.INFO, __file__, 1, "ui-log-marker", None, None)
+    )
+    body = _client(tmp_path).get("/api/logs").json()
+    assert any(line["message"] == "ui-log-marker" for line in body["lines"])
+    assert "last_id" in body
+
+
+def test_logs_endpoint_after_returns_only_newer(tmp_path):
+    import logging
+
+    from app.logbuffer import LOG_BUFFER
+
+    client = _client(tmp_path)
+    last = client.get("/api/logs").json()["last_id"]
+    LOG_BUFFER.handle(
+        logging.LogRecord("t", logging.INFO, __file__, 1, "after-marker", None, None)
+    )
+    body = client.get(f"/api/logs?after={last}").json()
+    # The `after` cursor must exclude everything at/before `last` (other tests share
+    # the process-global buffer), and include the record we just added.
+    assert all(line["id"] > last for line in body["lines"])
+    assert any(line["message"] == "after-marker" for line in body["lines"])
 
 
 def test_connection_test_ok(tmp_path):
