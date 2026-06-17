@@ -9,21 +9,20 @@
 
 Whitelistarr mirrors **Sonarr/Radarr tags to Plex labels**, so a restricted Plex
 share can be whitelisted automatically — no second library, no labeling titles by
-hand. It also sends **Apprise notifications** for watch milestones and stale,
+hand. It can also send **Apprise notifications** for watch milestones and stale,
 unwatched content.
 
-It is a lean, environment-variable-driven service, built as a focused
-re-implementation of
-[plex-requester-collections](https://github.com/manybothans/plex-requester-collections)
-that does one thing well: keep a Plex label in sync with an \*arr tag, in real time.
+It is a lightweight, self-hosted service that does one thing well: keep Plex
+labels in sync with your \*arr tags, in real time. Configure it declaratively
+through environment variables, or interactively through the built-in web UI —
+including a guided first-run setup and **Sign in with Plex**.
+
+Whitelistarr is a focused reimplementation of
+[plex-requester-collections](https://github.com/manybothans/plex-requester-collections).
 
 Images are published to **`orelmor/whitelistarr`** (Docker Hub) and
 **`ghcr.io/orel-mor/whitelistarr`** (GHCR), multi-arch for `linux/amd64` and
 `linux/arm64`.
-
-> **Migrating from `Plex-Auto-Labels`?** The image moved to
-> `orelmor/whitelistarr`. The old `orelmor/plex-auto-labels` image still works but
-> is frozen — update your `image:` line to keep receiving releases.
 
 ## Features
 
@@ -38,8 +37,10 @@ Images are published to **`orelmor/whitelistarr`** (Docker Hub) and
   so it works regardless of which agent your library uses.
 - **Watch & stale notifications** — optional Apprise alerts when a requester
   finishes watching, or when requested content goes stale and unwatched.
-- **Optional web UI** — a schema-driven config editor served on the same port,
-  with secrets encrypted at rest.
+- **Web UI** — an optional, built-in interface on the same port: a first-run
+  setup wizard with Sign in with Plex, a status dashboard (job schedule, recent
+  activity, live connection health), and a full settings editor. Changes apply
+  live, with secrets encrypted at rest.
 - **Dry-run mode** — `DRY_RUN=true` logs every intended change without touching
   Plex or sending notifications.
 - **Reversible** — a one-shot `REVERSE=true` run strips every managed label and
@@ -70,8 +71,12 @@ Seerr request ──► Radarr / Sonarr (requester tag)
 ## Getting started
 
 You don't need to clone the repository — the image is prebuilt. Create a
-`docker-compose.yml` and run `docker compose up -d`. The example below enables
-every capability, including watched/stale notifications; trim what you don't need.
+`docker-compose.yml` and run `docker compose up -d`.
+
+The example below is a complete declarative setup. If you prefer, set only
+`PAL_SECRET_KEY` and `FEATURE_UI`, start the container, and configure everything
+else in the web UI — including **Sign in with Plex**, which fills in your Plex URL
+and token for you.
 
 ```yaml
 services:
@@ -84,52 +89,34 @@ services:
     volumes:
       - ./data:/data # persists the notification-dedup database and UI config
     environment:
-      # Plex (server owner; Plex Pass required for label-based share filtering)
-      PLEX_URL: "http://plex:32400"
-      PLEX_TOKEN: "your-plex-token"
-      PLEX_SECTIONS: "Movies,TV Shows" # empty = all movie/show sections
+      # --- Required to start ---
+      # Encrypts the UI config at rest. Generate once (see "Web UI" below).
+      PAL_SECRET_KEY: "paste-a-fernet-key-here"
+      FEATURE_UI: "true" # serve the web UI at http://host:8000/
 
-      # Radarr / Sonarr
+      # --- Core (or configure these in the UI; "Sign in with Plex" fills the first two) ---
+      PLEX_URL: "http://plex:32400" # Plex Pass required for label-based share filtering
+      PLEX_TOKEN: "your-plex-token"
       RADARR_URL: "http://radarr:7878"
       RADARR_API_KEY: "your-radarr-key"
       SONARR_URL: "http://sonarr:8989"
       SONARR_API_KEY: "your-sonarr-key"
+      # <arr-tag>:<plex-label>,... — unmapped tags are ignored
+      TAG_LABEL_MAP: "kids:kids-allowed,family:shared"
 
-      # Seerr (legacy OVERSEERR_URL / OVERSEERR_API_KEY are also accepted)
+      # --- Schedules (cron) ---
+      SWEEP_CRON: "0 * * * *" # reconcile sweep — hourly
+      WATCH_SCAN_CRON: "0 3 * * *" # watch/stale scan — daily at 03:00
+
+      # --- Notifications (optional; remove this block to disable) ---
+      FEATURE_NOTIFY: "true"
+      APPRISE_URLS: "discord://webhook_id/webhook_token" # comma-separated
       SEERR_URL: "http://seerr:5055"
       SEERR_API_KEY: "your-seerr-key"
-
-      # Core mapping: arr tag -> Plex label (unmapped tags are ignored)
-      TAG_LABEL_MAP: "kids:kids-allowed,family:shared"
-      LABEL_REMOVAL: "reconcile" # reconcile (add + remove) | add-only
-
-      # Labeling
-      FEATURE_WEBHOOK: "true"
-      FEATURE_SWEEP: "true"
-      SWEEP_CRON: "0 * * * *" # hourly
-
-      # Watched / stale notifications (Tautulli + Apprise)
-      FEATURE_NOTIFY: "true"
       TAUTULLI_URL: "http://tautulli:8181"
       TAUTULLI_API_KEY: "your-tautulli-key"
-      APPRISE_URLS: "discord://webhook_id/webhook_token" # comma-separated
-      NOTIFY_ON: "watched,stale"
-      WATCHED_PERCENT: "85"
-      STALE_AFTER_DAYS: "180"
-      UNWATCHED_AFTER_DAYS: "90"
-      WATCH_SCAN_CRON: "0 3 * * *" # daily 3am
 
-      # Web UI (served at http://host:8000/ on the same port)
-      FEATURE_UI: "true"
-      PAL_SECRET_KEY: "paste-a-fernet-key-here" # see "Web UI" to generate one
-      CONFIG_PATH: "/data/config.json"
-
-      # Server / ops
-      WEBHOOK_PATH: "/webhook/seerr"
-      PLEX_WEBHOOK_PATH: "/webhook/plex"
-      WEBHOOK_SECRET: "" # if set, the webhook URL must include ?token=THIS
-      DRY_RUN: "false" # set true for a safe first run
-      LOG_LEVEL: "info"
+      # --- Container ---
       TZ: "UTC"
       PUID: "1000"
       PGID: "1000"
@@ -142,9 +129,9 @@ docker compose logs -f
 curl http://localhost:8000/health   # -> {"status":"ok"}
 ```
 
-For a first run, set `DRY_RUN: "true"` and watch the logs: you'll see the labels
-it *would* add or remove and the notifications it *would* send, without touching
-Plex. Set it to `"false"` once the output looks correct.
+For a cautious first run, add `DRY_RUN: "true"` to the environment and watch the
+logs: you'll see the labels it *would* add or remove and the notifications it
+*would* send, without touching Plex. Remove it once the output looks correct.
 
 If Seerr runs on the same Docker network, drop the `ports:` mapping and point
 Seerr at `http://whitelistarr:8000` instead of the host.
