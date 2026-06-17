@@ -68,10 +68,12 @@ CONFIG_SCHEMA: list[dict[str, Any]] = [
         "fields": [
             {"key": "feature_webhook", "label": "Webhook receiver", "type": "bool"},
             {"key": "feature_sweep", "label": "Periodic sweep", "type": "bool"},
-            {"key": "sweep_interval_minutes", "label": "Sweep interval (min)", "type": "int"},
+            {"key": "sweep_cron", "label": "Sweep schedule (cron)", "type": "text",
+             "placeholder": "0 * * * *", "help": "5-field cron. Default hourly."},
             {"key": "feature_notify", "label": "Watched/stale notifications", "type": "bool"},
-            {"key": "watch_scan_interval_minutes", "label": "Watch scan interval (min)",
-             "type": "int", "depends_on": _NOTIFY_DEP},
+            {"key": "watch_scan_cron", "label": "Watch scan schedule (cron)", "type": "text",
+             "placeholder": "0 3 * * *", "help": "5-field cron. Default daily 3am.",
+             "depends_on": _NOTIFY_DEP},
         ],
     },
     {

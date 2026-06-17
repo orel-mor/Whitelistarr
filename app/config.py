@@ -7,10 +7,11 @@ properties so we avoid pydantic-settings' JSON pre-parsing of list/dict fields.
 
 from __future__ import annotations
 
+import uuid
 from functools import cached_property
 from typing import Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -42,6 +43,25 @@ def parse_tag_label_map(raw: str) -> dict[str, str]:
             raise ValueError(f"Invalid TAG_LABEL_MAP entry (empty tag or label): {entry!r}")
         result[tag] = label
     return result
+
+
+def minutes_to_cron(minutes: int) -> str:
+    """Translate a legacy interval-in-minutes into an equivalent cron expression."""
+    if minutes >= 60 and minutes % 60 == 0:
+        hours = minutes // 60
+        return "0 * * * *" if hours == 1 else f"0 */{hours} * * *"
+    return f"*/{minutes} * * * *"
+
+
+def is_valid_cron(expr: str) -> bool:
+    """True if ``expr`` parses as a 5-field crontab string."""
+    from apscheduler.triggers.cron import CronTrigger
+
+    try:
+        CronTrigger.from_crontab(expr)
+        return True
+    except (ValueError, TypeError):
+        return False
 
 
 class Settings(BaseSettings):
@@ -84,9 +104,13 @@ class Settings(BaseSettings):
     # --- Feature toggles ---
     feature_webhook: bool = True
     feature_sweep: bool = True
-    sweep_interval_minutes: int = 60
     feature_notify: bool = False
-    watch_scan_interval_minutes: int = 360
+    # Cron expressions (5-field). Legacy *_interval_minutes below are migrated in.
+    sweep_cron: str = "0 * * * *"  # hourly
+    watch_scan_cron: str = "0 3 * * *"  # daily at 03:00
+    # Legacy interval inputs (undocumented; translated to cron on load if cron unset).
+    sweep_interval_minutes: int | None = None
+    watch_scan_interval_minutes: int | None = None
 
     # --- Notifications ---
     apprise_urls: str = ""  # CSV of apprise URLs
@@ -111,6 +135,17 @@ class Settings(BaseSettings):
     feature_ui: bool = True
     pal_secret_key: str = ""  # Fernet key; required to enable the UI
     config_path: str = "/data/config.json"
+
+    @model_validator(mode="after")
+    def _migrate_legacy_intervals(self) -> "Settings":
+        if "sweep_cron" not in self.model_fields_set and self.sweep_interval_minutes is not None:
+            self.sweep_cron = minutes_to_cron(self.sweep_interval_minutes)
+        if (
+            "watch_scan_cron" not in self.model_fields_set
+            and self.watch_scan_interval_minutes is not None
+        ):
+            self.watch_scan_cron = minutes_to_cron(self.watch_scan_interval_minutes)
+        return self
 
     # --- Parsed views ---
     @cached_property
@@ -157,6 +192,12 @@ class Settings(BaseSettings):
                 errors.append("APPRISE_URLS is required for notifications.")
             if not self.seerr_url or not self.seerr_api_key:
                 errors.append("SEERR_URL and SEERR_API_KEY are required for notifications.")
+        if self.feature_sweep and not is_valid_cron(self.sweep_cron):
+            errors.append(f"SWEEP_CRON is not a valid cron expression: {self.sweep_cron!r}")
+        if self.feature_notify and not is_valid_cron(self.watch_scan_cron):
+            errors.append(
+                f"WATCH_SCAN_CRON is not a valid cron expression: {self.watch_scan_cron!r}"
+            )
         return errors
 
     def validate_runtime(self) -> None:
