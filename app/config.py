@@ -118,7 +118,7 @@ class Settings(BaseSettings):
 
     # --- Notifications ---
     apprise_urls: str = ""  # CSV of apprise URLs
-    notify_on: str = "watched,stale"  # CSV of event types
+    notify_on: str = "labeled,watched,stale"  # CSV of event types
     watched_percent: int = 85
     stale_after_days: int = 180
     unwatched_after_days: int = 90
