@@ -76,3 +76,10 @@ def test_reload_flags_restart_required_for_bootstrap_change():
 
 def test_bootstrap_fields_cover_bind_and_secret():
     assert {"webhook_host", "webhook_port", "pal_secret_key"} <= BOOTSTRAP_FIELDS
+
+
+def test_runtime_has_status_tracker():
+    from app.status import StatusTracker
+
+    rt = Runtime(_settings(), _components(), builder=lambda s: _components())
+    assert isinstance(rt.tracker, StatusTracker)

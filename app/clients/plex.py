@@ -108,6 +108,13 @@ class PlexClient:
         self._server = PlexServer(base_url, token)
         self._section_filter = set(sections or [])
 
+    def check(self) -> dict:
+        try:
+            name = self._server.friendlyName
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "detail": str(exc)}
+        return {"ok": True, "detail": str(name)}
+
     def _sections(self) -> list[object]:
         result = []
         for section in self._server.library.sections():

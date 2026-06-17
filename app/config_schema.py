@@ -18,6 +18,7 @@ _NOTIFY_DEP = {"key": "feature_notify", "value": True}
 CONFIG_SCHEMA: list[dict[str, Any]] = [
     {
         "name": "Plex",
+        "tier": "core",
         "fields": [
             {"key": "plex_url", "label": "Plex URL", "type": "text",
              "placeholder": "http://plex:32400"},
@@ -32,6 +33,7 @@ CONFIG_SCHEMA: list[dict[str, Any]] = [
     },
     {
         "name": "Radarr",
+        "tier": "core",
         "fields": [
             {"key": "radarr_url", "label": "Radarr URL", "type": "text",
              "placeholder": "http://radarr:7878"},
@@ -40,6 +42,7 @@ CONFIG_SCHEMA: list[dict[str, Any]] = [
     },
     {
         "name": "Sonarr",
+        "tier": "core",
         "fields": [
             {"key": "sonarr_url", "label": "Sonarr URL", "type": "text",
              "placeholder": "http://sonarr:8989"},
@@ -48,6 +51,7 @@ CONFIG_SCHEMA: list[dict[str, Any]] = [
     },
     {
         "name": "Seerr",
+        "tier": "advanced",
         "fields": [
             {"key": "seerr_url", "label": "Seerr URL", "type": "text",
              "placeholder": "http://seerr:5055"},
@@ -56,6 +60,7 @@ CONFIG_SCHEMA: list[dict[str, Any]] = [
     },
     {
         "name": "Labels",
+        "tier": "core",
         "fields": [
             {"key": "tag_label_map", "label": "Tag → Label map", "type": "keyvalue",
              "help": "Each Sonarr/Radarr tag maps to a Plex label."},
@@ -65,19 +70,21 @@ CONFIG_SCHEMA: list[dict[str, Any]] = [
     },
     {
         "name": "Features",
+        "tier": "core",
         "fields": [
             {"key": "feature_webhook", "label": "Webhook receiver", "type": "bool"},
             {"key": "feature_sweep", "label": "Periodic sweep", "type": "bool"},
-            {"key": "sweep_cron", "label": "Sweep schedule (cron)", "type": "text",
-             "placeholder": "0 * * * *", "help": "5-field cron. Default hourly."},
+            {"key": "sweep_cron", "label": "Sweep schedule", "type": "cron",
+             "placeholder": "0 * * * *", "help": "When the reconcile sweep runs."},
             {"key": "feature_notify", "label": "Watched/stale notifications", "type": "bool"},
-            {"key": "watch_scan_cron", "label": "Watch scan schedule (cron)", "type": "text",
-             "placeholder": "0 3 * * *", "help": "5-field cron. Default daily 3am.",
+            {"key": "watch_scan_cron", "label": "Watch scan schedule", "type": "cron",
+             "placeholder": "0 3 * * *", "help": "When the watch-history scan runs.",
              "depends_on": _NOTIFY_DEP},
         ],
     },
     {
         "name": "Notifications",
+        "tier": "advanced",
         "fields": [
             {"key": "apprise_urls", "label": "Apprise URLs", "type": "secret",
              "help": "Comma-separated. Contains tokens, stored encrypted."},
@@ -93,6 +100,7 @@ CONFIG_SCHEMA: list[dict[str, Any]] = [
     },
     {
         "name": "Tautulli",
+        "tier": "advanced",
         "fields": [
             {"key": "tautulli_url", "label": "Tautulli URL", "type": "text",
              "placeholder": "http://tautulli:8181", "depends_on": _NOTIFY_DEP},
@@ -102,6 +110,7 @@ CONFIG_SCHEMA: list[dict[str, Any]] = [
     },
     {
         "name": "Server",
+        "tier": "advanced",
         "fields": [
             {"key": "webhook_host", "label": "Bind host", "type": "text"},
             {"key": "webhook_port", "label": "Bind port", "type": "int"},
@@ -112,6 +121,7 @@ CONFIG_SCHEMA: list[dict[str, Any]] = [
     },
     {
         "name": "Ops",
+        "tier": "advanced",
         "fields": [
             {"key": "dry_run", "label": "Dry run", "type": "bool",
              "help": "Log intended changes without applying."},

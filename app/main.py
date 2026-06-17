@@ -30,9 +30,14 @@ class Components:
     label_sync: Any
     watch_monitor: Any | None
     scheduler: Scheduler
+    plex: Any = None
+    radarr: Any = None
+    sonarr: Any = None
+    seerr: Any = None
+    tautulli: Any = None
 
 
-def build_components(settings: Settings) -> Components:
+def build_components(settings: Settings, tracker: Any | None = None) -> Components:
     """Construct clients and services from settings (performs network connect)."""
     from app.clients.notify import Notifier
     from app.clients.plex import PlexClient
@@ -89,11 +94,16 @@ def build_components(settings: Settings) -> Components:
         notify_labeled=notify_labeled,
     )
 
+    seerr = tautulli = None
+    if settings.feature_notify:
+        seerr = SeerrClient(settings.seerr_url, settings.seerr_api_key)
+        tautulli = TautulliClient(settings.tautulli_url, settings.tautulli_api_key)
+
     watch_monitor = None
     if settings.feature_notify:
         watch_monitor = WatchMonitor(
-            overseerr=SeerrClient(settings.seerr_url, settings.seerr_api_key),
-            tautulli=TautulliClient(settings.tautulli_url, settings.tautulli_api_key),
+            overseerr=seerr,
+            tautulli=tautulli,
             plex=plex,
             notifier=notifier,
             state=state,
@@ -103,12 +113,18 @@ def build_components(settings: Settings) -> Components:
             unwatched_after_days=settings.unwatched_after_days,
         )
 
-    scheduler = build_scheduler(
-        settings,
-        sweep_fn=label_sync.sweep,
-        watch_fn=(watch_monitor.scan if watch_monitor else (lambda: None)),
+    sweep_fn = label_sync.sweep
+    watch_fn = watch_monitor.scan if watch_monitor else (lambda: None)
+    if tracker is not None:
+        sweep_fn = tracker.wrap("sweep", sweep_fn)
+        if watch_monitor is not None:
+            watch_fn = tracker.wrap("watch_scan", watch_fn)
+
+    scheduler = build_scheduler(settings, sweep_fn=sweep_fn, watch_fn=watch_fn)
+    return Components(
+        settings, label_sync, watch_monitor, scheduler,
+        plex=plex, radarr=radarr, sonarr=sonarr, seerr=seerr, tautulli=tautulli,
     )
-    return Components(settings, label_sync, watch_monitor, scheduler)
 
 
 def _ensure_parent_dir(path: str) -> None:

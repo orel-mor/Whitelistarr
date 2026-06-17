@@ -53,3 +53,20 @@ def test_enum_fields_declare_options():
     for field in fields_by_key().values():
         if field["type"] == "enum":
             assert field.get("options"), f"{field['key']} enum needs options"
+
+
+def test_every_group_has_a_tier():
+    for group in CONFIG_SCHEMA:
+        assert group.get("tier") in ("core", "advanced"), group["name"]
+
+
+def test_cron_fields_use_cron_type():
+    by_key = fields_by_key()
+    assert by_key["sweep_cron"]["type"] == "cron"
+    assert by_key["watch_scan_cron"]["type"] == "cron"
+
+
+def test_core_groups_present():
+    tiers = {g["name"]: g["tier"] for g in CONFIG_SCHEMA}
+    assert tiers["Plex"] == "core"
+    assert tiers["Server"] == "advanced"

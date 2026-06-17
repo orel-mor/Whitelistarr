@@ -4,36 +4,245 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Whitelistarr</title>
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23e5a00d' d='M2 11.5V4a2 2 0 0 1 2-2h7.5a2 2 0 0 1 1.4.6l8 8a2 2 0 0 1 0 2.8l-7.1 7.1a2 2 0 0 1-2.8 0l-8-8A2 2 0 0 1 2 11.5Z'/%3E%3Ccircle cx='7' cy='7' r='1.6' fill='%230d1014'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <script defer src="/static/js/api.js"></script>
+  <script defer src="/static/js/router.js"></script>
+  <script defer src="/static/js/store.js"></script>
+  <script defer src="/static/js/app.js"></script>
+  <script defer src="/static/vendor/alpine.min.js"></script>
 </head>
-<body>
-  <header>
-    <h1>Whitelistarr</h1>
-    <span id="version" class="muted"></span>
-  </header>
+<body x-data x-init="$store.app.init()">
+  <template x-if="$store.app.route === 'setup'">
+    <main id="wizard" x-data="wizard()">
+      <div class="wizard">
+        <div class="wizard-progress">
+          <template x-for="(s, i) in steps" :key="i">
+            <span class="step-dot" :class="{active: step===i, done: step>i}" x-text="s"></span>
+          </template>
+        </div>
 
-  <div id="banner" class="banner hidden"></div>
-  <div id="errors" class="errors hidden"></div>
+        <div class="wizard-panel" x-show="step===0">
+          <h1>Welcome to Whitelistarr</h1>
+          <p class="muted">Mirror your Sonarr/Radarr tags to Plex labels so a restricted share
+            stays whitelisted automatically. Let's connect your services.</p>
+          <button class="btn primary" @click="next()">Get started</button>
+        </div>
 
-  <main>
-    <section id="actions" class="card">
-      <h2>Actions</h2>
-      <div class="actions-row">
-        <button data-action="test-notification" class="btn">Send test notification</button>
-        <button data-action="sweep" class="btn">Run sweep now</button>
-        <button data-action="reverse" class="btn danger">Run reverse (remove all labels)</button>
+        <div class="wizard-panel" x-show="step===1" @plex-connected="next()">
+          <h1>Connect Plex</h1>
+          <div x-data="plexSignIn()">
+            <template x-if="phase==='idle'">
+              <button class="btn primary" @click="start()">Sign in with Plex</button>
+            </template>
+            <template x-if="phase==='pending'">
+              <div>
+                <p class="muted">Waiting for authorization in the popup…</p>
+                <template x-if="authUrl">
+                  <a :href="authUrl" target="_blank" class="btn small">Popup blocked? Open Plex sign-in</a>
+                </template>
+              </div>
+            </template>
+            <template x-if="phase==='pick'">
+              <div>
+                <p class="muted">Choose your server:</p>
+                <template x-for="s in servers" :key="s.clientIdentifier">
+                  <div class="server-pick">
+                    <strong x-text="s.name"></strong>
+                    <template x-for="conn in s.connections" :key="conn.uri">
+                      <button class="btn small" @click="apply(conn.uri)">
+                        <span x-text="conn.uri"></span>
+                        <span class="muted" x-text="conn.local ? ' (local)' : ' (remote)'"></span>
+                      </button>
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template x-if="phase==='done'">
+              <p class="pill ok">Connected — <span x-text="chosen"></span></p>
+            </template>
+            <p class="errors" x-show="error" x-text="error"></p>
+          </div>
+          <div class="wizard-nav">
+            <button class="btn" @click="back()">Back</button>
+          </div>
+        </div>
+
+        <div class="wizard-panel" x-show="step===2">
+          <h1>Radarr &amp; Sonarr</h1>
+          <div class="group">
+            <h2>Radarr</h2>
+            <div class="field"><label>URL</label><input type="text" x-model="radarr.url" placeholder="http://radarr:7878" /></div>
+            <div class="field"><label>API key</label><input type="password" x-model="radarr.key" /></div>
+            <button class="btn small" @click="saveArr('radarr')">Test connection</button>
+            <span class="pill" :class="radarr.ok===null ? '' : (radarr.ok ? 'ok' : 'err')"
+                  x-text="radarr.ok===null ? '' : (radarr.ok ? 'connected' : 'failed')"></span>
+          </div>
+          <div class="group">
+            <h2>Sonarr</h2>
+            <div class="field"><label>URL</label><input type="text" x-model="sonarr.url" placeholder="http://sonarr:8989" /></div>
+            <div class="field"><label>API key</label><input type="password" x-model="sonarr.key" /></div>
+            <button class="btn small" @click="saveArr('sonarr')">Test connection</button>
+            <span class="pill" :class="sonarr.ok===null ? '' : (sonarr.ok ? 'ok' : 'err')"
+                  x-text="sonarr.ok===null ? '' : (sonarr.ok ? 'connected' : 'failed')"></span>
+          </div>
+          <div class="wizard-nav">
+            <button class="btn" @click="back()">Back</button>
+            <button class="btn" @click="next()">Skip for now</button>
+            <button class="btn primary" @click="next()" :disabled="!canLeaveArr()">Next</button>
+          </div>
+        </div>
+
+        <div class="wizard-panel" x-show="step===3">
+          <h1>Tag → label map</h1>
+          <p class="muted">Which *arr tag grants which Plex label. Comma-separated
+            <code>tag:label</code> pairs.</p>
+          <div class="field">
+            <input type="text" x-model="tagMap" placeholder="kids:kids-allowed,family:shared" />
+          </div>
+          <div class="wizard-nav">
+            <button class="btn" @click="back()">Back</button>
+            <button class="btn primary" @click="saveTags()">Next</button>
+          </div>
+        </div>
+
+        <div class="wizard-panel" x-show="step===4">
+          <h1>All set</h1>
+          <p class="muted">Your services are connected and Whitelistarr will keep Plex labels in
+            sync. Last step (in Plex): restrict your shared user to the label under
+            Settings → Users &amp; Sharing → Restrictions.</p>
+          <button class="btn primary" @click="finish()">Go to Status</button>
+        </div>
       </div>
-      <div id="action-result" class="muted"></div>
-    </section>
+    </main>
+  </template>
 
-    <form id="config-form"></form>
-  </main>
+  <template x-if="$store.app.route !== 'setup'">
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">Whitelistarr</div>
+        <nav>
+          <a :class="{active: $store.app.route==='status'}" href="#/status">Status</a>
+          <a :class="{active: $store.app.route==='settings'}" href="#/settings">Settings</a>
+        </nav>
+        <div class="sidebar-foot muted">
+          <span x-text="$store.app.version"></span>
+          <p>No built-in auth — keep behind a reverse proxy.</p>
+        </div>
+      </aside>
+      <main>
+        <section x-show="$store.app.route==='status'" x-data="statusView()" x-init="start()">
+          <header class="page-head">
+            <h1>Status</h1>
+            <button class="btn small" @click="refresh()">Refresh</button>
+          </header>
 
-  <div class="savebar">
-    <span id="save-status" class="muted"></span>
-    <button id="save-btn" class="btn primary" type="button">Save</button>
+          <template x-if="data && !data.configured">
+            <div class="errors">
+              <strong>Not fully configured:</strong>
+              <ul><template x-for="e in data.errors" :key="e"><li x-text="e"></li></template></ul>
+            </div>
+          </template>
+
+          <div class="cards" x-show="data">
+            <div class="group">
+              <h2>Schedule</h2>
+              <template x-if="data && data.jobs.length === 0"><p class="muted">No jobs scheduled.</p></template>
+              <template x-for="j in (data ? data.jobs : [])" :key="j.name">
+                <div class="row">
+                  <strong x-text="j.name"></strong>
+                  <span class="muted" x-text="'next: ' + relativeNext(j.next_run)"></span>
+                </div>
+              </template>
+            </div>
+
+            <div class="group">
+              <h2>Recent activity</h2>
+              <div class="row"><span>Sweep</span>
+                <span class="muted" x-text="summary('sweep')"></span></div>
+              <div class="row"><span>Watch scan</span>
+                <span class="muted" x-text="summary('watch_scan')"></span></div>
+            </div>
+
+            <div class="group">
+              <h2>Connections</h2>
+              <template x-if="connList().length === 0"><p class="muted">No services configured.</p></template>
+              <template x-for="c in connList()" :key="c.name">
+                <div class="row">
+                  <span class="pill" :class="c.ok ? 'ok' : 'err'" x-text="c.name"></span>
+                  <span class="muted" x-text="c.detail"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="group">
+            <h2>Actions</h2>
+            <div class="actions-row">
+              <button class="btn" @click="action('test-notification')">Send test notification</button>
+              <button class="btn" @click="action('sweep')">Run sweep now</button>
+              <button class="btn danger" @click="action('reverse')">Run reverse (remove all labels)</button>
+            </div>
+          </div>
+        </section>
+        <section x-show="$store.app.route==='settings'" x-data="settings()" x-init="load()">
+          <header class="page-head">
+            <h1>Settings</h1>
+            <label class="adv-toggle">
+              <input type="checkbox" x-model="showAdvanced" /> Show advanced
+            </label>
+          </header>
+          <div class="group" x-data="plexSignIn()">
+            <h2>Plex sign-in</h2>
+            <template x-if="phase==='idle'">
+              <button class="btn primary" @click="start()">Sign in with Plex</button>
+            </template>
+            <template x-if="phase==='pending'">
+              <div>
+                <p class="muted">Waiting for authorization in the popup…</p>
+                <template x-if="authUrl">
+                  <a :href="authUrl" target="_blank" class="btn small">Popup blocked? Open Plex sign-in</a>
+                </template>
+              </div>
+            </template>
+            <template x-if="phase==='pick'">
+              <div>
+                <p class="muted">Choose your server:</p>
+                <template x-for="s in servers" :key="s.clientIdentifier">
+                  <div class="server-pick">
+                    <strong x-text="s.name"></strong>
+                    <template x-for="conn in s.connections" :key="conn.uri">
+                      <button class="btn small" @click="apply(conn.uri)">
+                        <span x-text="conn.uri"></span>
+                        <span class="muted" x-text="conn.local ? ' (local)' : ' (remote)'"></span>
+                      </button>
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template x-if="phase==='done'">
+              <p class="pill ok">Connected — <span x-text="chosen"></span></p>
+            </template>
+            <p class="errors" x-show="error" x-text="error"></p>
+          </div>
+
+          <div x-ref="core" class="groups"></div>
+          <div x-ref="adv" class="groups" x-show="showAdvanced"></div>
+          <div class="savebar">
+            <span class="muted" x-text="saving ? 'Saving…' : ''"></span>
+            <button class="btn primary" @click="save()">Save</button>
+          </div>
+        </section>
+      </main>
+    </div>
+  </template>
+
+  <div class="toasts">
+    <template x-for="t in $store.app.toasts" :key="t.id">
+      <div class="toast" :class="t.kind" x-text="t.msg"></div>
+    </template>
   </div>
-
-  <script src="/static/app.js"></script>
 </body>
 </html>
