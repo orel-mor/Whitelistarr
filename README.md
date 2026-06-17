@@ -84,8 +84,8 @@ You don't need to clone the repository — the image is prebuilt. Create a
 `docker-compose.yml` and run `docker compose up -d`.
 
 The example below is a complete declarative setup. If you prefer, set only
-`PAL_SECRET_KEY` and `FEATURE_UI`, start the container, and configure everything
-else in the web UI — including **Sign in with Plex**, which fills in your Plex URL
+`PAL_SECRET_KEY`, start the container, and configure everything else in the web UI
+(served by default) — including **Sign in with Plex**, which fills in your Plex URL
 and token for you.
 
 ```yaml
@@ -95,30 +95,34 @@ services:
     container_name: whitelistarr
     restart: unless-stopped
     ports:
-      - "8000:8000" # webhook receiver + /health (and the web UI)
+      - "8000:8000" # web UI + webhook receiver + /health
     volumes:
-      - ./data:/data # persists the notification-dedup database and UI config
+      - ./data:/data # notification-dedup database + encrypted UI config
     environment:
-      # --- Required to start ---
-      # Encrypts the UI config at rest. Generate once (see "Web UI" below).
+      # === Required ===
+      # Encrypts the saved UI config at rest. Generate once (see "Web UI" below).
       PAL_SECRET_KEY: "paste-a-fernet-key-here"
-      FEATURE_UI: "true" # serve the web UI at http://host:8000/
 
-      # --- Core (or configure these in the UI; "Sign in with Plex" fills the first two) ---
+      # === Connections ===
+      # Or leave these blank and set them in the UI; "Sign in with Plex" fills Plex.
       PLEX_URL: "http://plex:32400" # Plex Pass required for label-based share filtering
       PLEX_TOKEN: "your-plex-token"
       RADARR_URL: "http://radarr:7878"
       RADARR_API_KEY: "your-radarr-key"
       SONARR_URL: "http://sonarr:8989"
       SONARR_API_KEY: "your-sonarr-key"
-      # <arr-tag>:<plex-label>,... — unmapped tags are ignored
+
+      # === Labels (the core mapping) ===
+      # <arr-tag>:<plex-label>,... — unmapped tags are ignored.
       TAG_LABEL_MAP: "kids:kids-allowed,family:shared"
 
-      # --- Schedules (cron) ---
+      # === Schedules (optional — defaults shown) ===
+      # The reactive poll (new media + tag changes, ~60s) is on by default; the
+      # sweep is the slower full-reconcile safety net.
       SWEEP_CRON: "0 * * * *" # reconcile sweep — hourly
       WATCH_SCAN_CRON: "0 3 * * *" # watch/stale scan — daily at 03:00
 
-      # --- Notifications (optional; remove this block to disable) ---
+      # === Notifications (optional — remove this block to disable) ===
       FEATURE_NOTIFY: "true"
       APPRISE_URLS: "discord://webhook_id/webhook_token" # comma-separated
       SEERR_URL: "http://seerr:5055"
@@ -126,7 +130,7 @@ services:
       TAUTULLI_URL: "http://tautulli:8181"
       TAUTULLI_API_KEY: "your-tautulli-key"
 
-      # --- Container ---
+      # === Container ===
       TZ: "UTC"
       PUID: "1000"
       PGID: "1000"
@@ -194,17 +198,20 @@ This is the step that actually gates access (requires Plex Pass on your account)
 
 ## Web UI
 
-With `FEATURE_UI=true` and a `PAL_SECRET_KEY` set, a web UI is served at
-`http://<host>:8000/` (the same port as the webhooks). It's a small single-page
-app (vendored [Alpine.js](https://alpinejs.dev/) — no build step) with three
-screens:
+The web UI is **on by default** — set a `PAL_SECRET_KEY` and it's served at
+`http://<host>:8000/` (the same port as the webhooks). Set `FEATURE_UI=false` to
+disable it. It's a small single-page app (vendored
+[Alpine.js](https://alpinejs.dev/) — no build step) with these screens:
 
 - **Setup wizard** (first run, when nothing is configured yet): sign in with
   Plex, connect Radarr/Sonarr with live connection tests, set your tag → label
   map, done. It hands off to the Status screen.
-- **Status**: job schedule with next-run times, recent sweep/scan activity, live
+- **Status**: job schedule with next-run times, the read-only tag → label map,
+  recent activity (reactive tag changes, recently-added, sweep, watch scan), live
   per-service connection health, and the actions (run sweep, send test
   notification, run reverse).
+- **Logs**: a live tail of the app log with auto-refresh (on by default, every
+  3s), a level filter, and clear/refresh.
 - **Settings**: every setting grouped, with **Core** shown and **Advanced**
   behind a toggle. Schedules use preset chips (Hourly / Every 6h / Daily / …) or
   a custom cron expression.
