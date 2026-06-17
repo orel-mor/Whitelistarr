@@ -161,12 +161,7 @@ input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); bo
 /* Signature: a gold tag glyph by the brand, and a gold rail on the active nav
    item — the "label" the whole product is about. */
 .sidebar .brand { display: flex; align-items: center; gap: 9px; }
-.sidebar .brand::before {
-  content: ""; width: 16px; height: 16px; flex: none;
-  background: var(--accent);
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M2 11.5V4a2 2 0 0 1 2-2h7.5a2 2 0 0 1 1.4.6l8 8a2 2 0 0 1 0 2.8l-7.1 7.1a2 2 0 0 1-2.8 0l-8-8A2 2 0 0 1 2 11.5Z'/%3E%3Ccircle cx='7' cy='7' r='1.6' fill='black'/%3E%3C/svg%3E") center/contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M2 11.5V4a2 2 0 0 1 2-2h7.5a2 2 0 0 1 1.4.6l8 8a2 2 0 0 1 0 2.8l-7.1 7.1a2 2 0 0 1-2.8 0l-8-8A2 2 0 0 1 2 11.5Z'/%3E%3C/svg%3E") center/contain no-repeat;
-}
+.sidebar .brand-logo { width: 20px; height: 20px; flex: none; display: block; }
 .sidebar nav a { position: relative; transition: background .12s ease, color .12s ease; }
 .sidebar nav a.active::before {
   content: ""; position: absolute; left: -14px; top: 6px; bottom: 6px; width: 3px;

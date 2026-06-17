@@ -32,13 +32,19 @@ CONN_CACHE_TTL = 8.0
 PIN_TTL = 600.0
 
 STATIC_DIR = Path(__file__).parent / "static"
-_MEDIA = {".html": "text/html", ".js": "text/javascript", ".css": "text/css"}
+_MEDIA = {
+    ".html": "text/html",
+    ".js": "text/javascript",
+    ".css": "text/css",
+    ".svg": "image/svg+xml",
+}
 
 # The web UI ships exactly these static assets, keyed by their request path. The
 # user-provided path is only ever used as a dict key, so it can't traverse out of
 # STATIC_DIR or read arbitrary files.
 _STATIC_NAMES = (
     "index.html",
+    "logo.svg",
     "vendor/alpine.min.js",
     "css/style.css",
     "js/api.js",
