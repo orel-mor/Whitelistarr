@@ -1,7 +1,7 @@
 ## What & why
 
-<!-- Base branch: feature PRs target `dev` (cuts a prerelease + `:dev` image).
-     `dev` -> `main` PRs (merge commit, not squash) cut the stable release. -->
+<!-- Trunk-based: target `main`. Merging builds the `:dev` edge image; stable
+     releases are cut on demand via the Release workflow (Actions tab). -->
 
 <!-- Briefly: what does this change and why? -->
 
