@@ -143,6 +143,11 @@ class Settings(BaseSettings):
     feature_ui: bool = True
     pal_secret_key: str = ""  # Fernet key; required to enable the UI
     config_path: str = "/data/config.json"
+    # Set true only when the user presses Finish at the end of the setup wizard.
+    # While false (UI mode), the app builds no clients and starts no routines — the
+    # UI reroutes to the wizard. Not a UI-editable field; written by the finish
+    # endpoint. Ignored in headless mode (no wizard there).
+    onboarding_complete: bool = False
 
     @model_validator(mode="after")
     def _migrate_legacy_intervals(self) -> Settings:

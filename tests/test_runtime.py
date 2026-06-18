@@ -66,6 +66,31 @@ def test_reload_does_not_start_scheduler_when_unconfigured():
     assert rt.components is None                     # UI-only until configured
 
 
+def test_reload_stays_ui_only_until_onboarding_complete():
+    # Config is valid but the user hasn't pressed Finish yet: don't build clients
+    # or start jobs. Routines only start once onboarding_complete flips true.
+    old = _components("old")
+    new = _components("new")
+    rt = Runtime(_settings(onboarding_complete=False), old, builder=lambda s: new)
+    rt.start()
+    result = rt.reload(_settings(onboarding_complete=False))
+    assert result.ok is True
+    assert rt.components is None
+    assert new.scheduler.started is False
+    assert old.scheduler.shutdown_called is True
+
+
+def test_reload_builds_when_onboarding_complete():
+    old = _components("old")
+    new = _components("new")
+    rt = Runtime(_settings(onboarding_complete=False), old, builder=lambda s: new)
+    rt.start()
+    result = rt.reload(_settings(onboarding_complete=True))
+    assert result.ok is True
+    assert rt.label_sync == "new"
+    assert new.scheduler.started is True
+
+
 def test_reload_rolls_back_on_build_failure():
     old = _components("old")
 
