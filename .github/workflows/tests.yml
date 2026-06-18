@@ -2,7 +2,7 @@ name: Tests
 
 on:
   pull_request:
-    branches: [main, beta]
+    branches: [main, dev]
 
 concurrency:
   group: tests-${{ github.ref }}

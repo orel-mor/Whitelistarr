@@ -48,25 +48,26 @@ The type drives the automated version bump, so it matters:
 | `feat!:` or `BREAKING CHANGE:` | major release |
 | `docs:` / `chore:` / `test:` / `ci:` / `refactor:` | no release |
 
-Pull requests are squash-merged, so the **PR title** becomes the commit that
-[python-semantic-release](https://python-semantic-release.readthedocs.io/) reads.
-A non-conventional title means no release is cut.
+Feature PRs are squash-merged into `dev`, so the **PR title** becomes the commit
+that [python-semantic-release](https://python-semantic-release.readthedocs.io/)
+reads. A non-conventional title means no release is cut.
 
 Do not hand-edit the version in `pyproject.toml` or `app/__init__.py` — CI owns it.
 
 ## Releases
 
-The project is **trunk-based**: `main` is the only permanent branch and releases
-are fully automated.
+The branch model is **feature branch → `dev` → `main`**, fully automated:
 
-- Each squash-merge to **`main`** cuts a stable release (GitHub Release +
+- **Feature work:** branch off `dev`, open a PR **into `dev`**, squash-merge.
+  Each merge to `dev` cuts a prerelease (`vX.Y.Z-dev.N`) and publishes the image
+  tagged `:dev` and `:X.Y.Z`.
+- **Stable release:** open a PR from **`dev` into `main`** and **merge it with a
+  merge commit (not squash)** so `main` keeps the individual Conventional Commits
+  that drive the changelog. The merge cuts a stable release (GitHub Release +
   changelog) and publishes the image tagged `:latest` and `:X.Y.Z`.
-- To stage a risky change before release, create a short-lived **`beta`** branch
-  and push to it: it cuts prereleases (`vX.Y.Z-beta.N`) and publishes `:beta`.
-  Open a PR from `beta` into `main`, merge, then delete `beta`.
 
-Workflow: feature branch → PR into `main` → squash-merge. No long-lived `dev`
-branch is needed.
+So: feature branch → PR into `dev` (squash) → batch up → PR `dev` into `main`
+(merge commit) for the stable cut.
 
 ## Reporting issues
 

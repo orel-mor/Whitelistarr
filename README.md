@@ -301,14 +301,14 @@ conventions, and release process.
 
 ## Releases and CI
 
-The project is **trunk-based**: `main` is the single permanent branch, with releases
-automated by
+The branch model is **feature branch → `dev` → `main`**, with releases automated by
 [python-semantic-release](https://python-semantic-release.readthedocs.io/) from
-[Conventional Commits](https://www.conventionalcommits.org/). A squash-merge to
-`main` cuts a stable release (GitHub Release, changelog, multi-arch `:latest` and
-`:X.Y.Z` images); the commit type drives the bump (`feat:` → minor, `fix:` → patch,
-`feat!:`/`BREAKING CHANGE:` → major; `docs:`/`chore:`/`test:` → none). Push an
-on-demand `beta` branch to stage prereleases (`:beta`) first.
+[Conventional Commits](https://www.conventionalcommits.org/). Merging a feature PR
+into `dev` cuts a prerelease (multi-arch `:dev` and `:X.Y.Z` images); promoting
+`dev` into `main` (with a merge commit) cuts a stable release (GitHub Release,
+changelog, multi-arch `:latest` and `:X.Y.Z` images). The commit type drives the
+bump (`feat:` → minor, `fix:` → patch, `feat!:`/`BREAKING CHANGE:` → major;
+`docs:`/`chore:`/`test:` → none).
 
 Pull requests also run tests, lint, CodeQL, a dependency audit, and a Trivy image
 scan. See [`.github/workflows/`](.github/workflows/) for the full pipeline.
