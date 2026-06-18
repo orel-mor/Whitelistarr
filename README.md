@@ -156,9 +156,10 @@ The web UI is **on by default** — set a `PAL_SECRET_KEY` and it's served at
 `http://<host>:8000/` (same port as the webhooks). Set `FEATURE_UI=false` to disable
 it. It's a small single-page app (vendored [Alpine.js](https://alpinejs.dev/), no
 build step) with four screens: a first-run **Setup wizard** (Sign in with Plex,
-connect Radarr/Sonarr, set the tag → label map); a **Status** dashboard (job
-schedule, recent activity, live connection health, and actions); a live **Logs**
-tail; and a grouped **Settings** editor.
+connect Radarr/Sonarr, set the tag → label map, and an optional notifications step
+for Tautulli/Seerr/Apprise); a **Status** dashboard (job schedule, recent activity,
+live connection health, and actions); a live **Logs** tail; and a **Settings** editor
+split into **Core**, **Notifications** (toggle on/off), and **Advanced** sections.
 
 **Generate a `PAL_SECRET_KEY`** (a Fernet key) once:
 
@@ -172,7 +173,10 @@ openssl rand -base64 32 | tr '+/' '-_'
 - **First run** seeds config from the environment; after that the **saved config is
   the source of truth** and the environment is a fallback.
 - **Secrets** (tokens, API keys) are encrypted at rest with `PAL_SECRET_KEY` and
-  never returned to the browser in plaintext.
+  never returned to the browser in plaintext. **Apprise URLs** are also encrypted at
+  rest but *are* shown in the UI (one per line) so you can review and edit them.
+- **Test connection** probes the values typed into the form, so you can verify a
+  service before saving.
 - **Changes apply live** (no restart), except the bootstrap settings
   (`PAL_SECRET_KEY`, `CONFIG_PATH`, `STATE_DB_PATH`, `FEATURE_UI`, `WEBHOOK_HOST`,
   `WEBHOOK_PORT`), which show a "restart to apply" banner.
