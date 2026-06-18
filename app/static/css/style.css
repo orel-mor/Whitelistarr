@@ -216,6 +216,20 @@ input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); bo
 .wizard-panel h1 { font-weight: 680; }
 .group h2 { text-transform: none; font-weight: 620; }
 
+/* Activity log table. */
+table.activity { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.activity th, table.activity td {
+  text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+table.activity th {
+  color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase;
+  letter-spacing: .4px;
+}
+table.activity tr:last-child td { border-bottom: 0; }
+table.activity td:first-child { white-space: nowrap; font-weight: 500; }
+table.activity td:last-child { white-space: nowrap; color: var(--muted); text-align: right; }
+
 /* Respect reduced motion. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

@@ -155,17 +155,23 @@ def _ui_enabled(settings: Settings) -> bool:
 
 def create_application(settings: Settings) -> Any:
     """Build the FastAPI app: webhooks + scheduler (if configured) + UI (if enabled)."""
+    from app.status import StatusTracker
     from app.webhook import create_app
 
+    # One tracker shared by the components (whose scheduled jobs record into it)
+    # and the Runtime (which the Status page reads). Building components without
+    # it leaves every job unrecorded -> the Status page shows "never run".
+    tracker = StatusTracker()
+
     configured = not settings.runtime_errors()
-    components = build_components(settings) if configured else None
+    components = build_components(settings, tracker=tracker) if configured else None
     if not configured:
         log.warning(
             "Not fully configured: %s — starting UI only.",
             "; ".join(settings.runtime_errors()),
         )
 
-    runtime = Runtime(settings, components)
+    runtime = Runtime(settings, components, tracker=tracker)
 
     webui_router = None
     if _ui_enabled(settings):

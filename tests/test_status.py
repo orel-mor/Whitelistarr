@@ -14,6 +14,50 @@ def test_reactive_run_is_tracked():
     assert snap["reactive"]["added_titles"] == ["Dune"]
 
 
+def test_history_logs_only_meaningful_runs():
+    t = StatusTracker()
+    t.record("reactive", {"tag_changes": 0, "added": 0})   # idle poll -> not logged
+    t.record("sweep", {"processed": 50, "changed": 0})     # no-op sweep -> not logged
+    assert t.history() == []
+    # but snapshot (last-run liveness) still updates
+    assert t.snapshot()["reactive"]["tag_changes"] == 0
+
+
+def test_history_logs_runs_that_did_something():
+    t = StatusTracker()
+    t.record("reactive", {"tag_changes": 1, "added": 0})
+    t.record("sweep", {"processed": 50, "changed": 3})
+    t.record("watch_scan", {"processed": 9, "notified": 2})
+    actions = [e["action"] for e in t.history()]
+    assert actions == ["watch_scan", "sweep", "reactive"]  # newest first
+
+
+def test_manual_action_always_logged_even_when_noop():
+    t = StatusTracker()
+    t.record("sweep", {"processed": 10, "changed": 0}, history=True)
+    t.record("test-notification", {"ok": True}, history=True)
+    actions = [e["action"] for e in t.history()]
+    assert actions == ["test-notification", "sweep"]
+
+
+def test_history_entries_carry_action_time_and_summary_with_id():
+    t = StatusTracker()
+    t.record("sweep", {"processed": 5, "changed": 2})
+    e = t.history()[0]
+    assert e["action"] == "sweep"
+    assert e["changed"] == 2 and e["processed"] == 5
+    assert isinstance(e["at"], str) and e["at"]
+    assert isinstance(e["id"], int)
+
+
+def test_history_capped_newest_kept():
+    t = StatusTracker(history_size=3)
+    for i in range(5):
+        t.record("sweep", {"processed": 1, "changed": i + 1}, history=True)
+    changed = [e["changed"] for e in t.history()]
+    assert changed == [5, 4, 3]  # newest first, oldest dropped
+
+
 def test_record_stores_summary_with_timestamp():
     t = StatusTracker()
     t.record("sweep", {"processed": 10, "changed": 3})
