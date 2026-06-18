@@ -1,6 +1,7 @@
 from app.config import Settings
 from app.config_schema import (
     CONFIG_SCHEMA,
+    encrypted_keys,
     field_keys,
     fields_by_key,
     secret_keys,
@@ -15,6 +16,8 @@ def test_every_schema_key_is_a_real_settings_field():
 
 
 def test_secret_keys_subset_and_expected():
+    # Masked-from-browser secrets. Apprise URLs are deliberately NOT here — the
+    # user must see/edit them — but they are still encrypted at rest.
     expected = {
         "plex_token",
         "radarr_api_key",
@@ -22,10 +25,17 @@ def test_secret_keys_subset_and_expected():
         "seerr_api_key",
         "tautulli_api_key",
         "webhook_secret",
-        "apprise_urls",
     }
     assert set(secret_keys()) == expected
     assert set(secret_keys()).issubset(set(field_keys()))
+    assert "apprise_urls" not in secret_keys()
+
+
+def test_apprise_encrypted_but_not_masked():
+    # Revealed in the UI (not a secret) yet encrypted on disk.
+    assert "apprise_urls" not in secret_keys()
+    assert "apprise_urls" in encrypted_keys()
+    assert set(secret_keys()).issubset(set(encrypted_keys()))
 
 
 def test_bootstrap_fields_are_not_editable():
@@ -57,7 +67,7 @@ def test_enum_fields_declare_options():
 
 def test_every_group_has_a_tier():
     for group in CONFIG_SCHEMA:
-        assert group.get("tier") in ("core", "advanced"), group["name"]
+        assert group.get("tier") in ("core", "notify", "advanced", "hidden"), group["name"]
 
 
 def test_cron_fields_use_cron_type():
