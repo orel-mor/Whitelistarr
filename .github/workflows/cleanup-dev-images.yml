@@ -1,0 +1,96 @@
+name: Cleanup dev images
+
+# Prune old development images so the immutable :dev-<release>-<build>-g<sha> tags
+# don't pile up forever. Deletes dev tags older than 30 days from BOTH registries,
+# always keeping the newest few (so the rolling :dev and recent builds survive).
+# Never touches :latest or release (:X.Y.Z) tags. Runs weekly; a manual run
+# defaults to dry-run (preview) so you can confirm before anything is deleted.
+
+on:
+  schedule:
+    - cron: "0 4 * * 1" # Mondays 04:00 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview only — list what would be deleted, delete nothing"
+        type: boolean
+        default: true
+
+concurrency:
+  group: cleanup-dev-images
+  cancel-in-progress: false
+
+jobs:
+  ghcr:
+    name: Prune GHCR dev-* (>30d)
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write # delete versions of this repo's GHCR package
+    steps:
+      # Battle-tested pruner: handles pagination + manifest children. keep-n-most-
+      # recent protects the newest builds (incl. the version that also carries the
+      # rolling :dev tag) regardless of age.
+      - uses: snok/container-retention-policy@v3
+        with:
+          account: orel-mor
+          token: ${{ secrets.GITHUB_TOKEN }}
+          image-names: "whitelistarr"
+          image-tags: "*.dev*-*" # immutable dev tags (1.9.0.dev4-<sha>); not :dev/:latest/:X.Y.Z
+          cut-off: 1mo
+          keep-n-most-recent: 5
+          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+
+  dockerhub:
+    name: Prune Docker Hub dev-* (>30d)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Prune
+        env:
+          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && 'true' || 'false' }}
+        run: |
+          python3 - <<'PY'
+          import os, re, json, datetime, urllib.request
+          REPO = "orelmor/whitelistarr"
+          # immutable dev tags only, e.g. 1.9.0.dev4-a8402c8 (not :dev/:latest/:X.Y.Z)
+          DEV_RE = re.compile(r"\.dev\d+-")
+          KEEP = 5
+          DAYS = 30
+          DRY = os.environ.get("DRY_RUN", "false") == "true"
+          cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=DAYS)
+
+          def call(url, method="GET", headers=None, data=None):
+              body = json.dumps(data).encode() if data is not None else None
+              h = {"Content-Type": "application/json", **(headers or {})}
+              req = urllib.request.Request(url, data=body, headers=h, method=method)
+              with urllib.request.urlopen(req) as r:
+                  return json.load(r) if r.length != 0 and method != "DELETE" else None
+
+          jwt = call("https://hub.docker.com/v2/users/login",
+                     method="POST",
+                     data={"username": os.environ["DH_USER"], "password": os.environ["DH_TOKEN"]})["token"]
+          H = {"Authorization": f"JWT {jwt}"}
+
+          tags, url = [], f"https://hub.docker.com/v2/repositories/{REPO}/tags?page_size=100"
+          while url:
+              page = call(url, headers=H)
+              tags += page["results"]
+              url = page.get("next")
+
+          devs = sorted((t for t in tags if DEV_RE.search(t["name"])),
+                        key=lambda t: t["last_updated"], reverse=True)
+          victims = [t for t in devs[KEEP:]
+                     if datetime.datetime.fromisoformat(t["last_updated"].replace("Z", "+00:00")) < cutoff]
+
+          for t in victims:
+              print(f"{'DRY would delete' if DRY else 'deleting'}: {t['name']} (updated {t['last_updated']})")
+              if not DRY:
+                  call(f"https://hub.docker.com/v2/repositories/{REPO}/tags/{t['name']}/",
+                       method="DELETE", headers=H)
+          print(f"{len(victims)} tag(s) {'would be ' if DRY else ''}deleted "
+                f"({len(devs)} dev tags total, keeping newest {KEEP} + any <{DAYS}d).")
+          PY
