@@ -35,7 +35,7 @@ jobs:
           account: orel-mor
           token: ${{ secrets.GITHUB_TOKEN }}
           image-names: "whitelistarr"
-          image-tags: "dev-*" # only immutable dev build tags; not :dev/:latest/:X.Y.Z
+          image-tags: "*.dev*-*" # immutable dev tags (1.9.0.dev4-<sha>); not :dev/:latest/:X.Y.Z
           cut-off: 1mo
           keep-n-most-recent: 5
           dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
@@ -54,8 +54,10 @@ jobs:
           DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && 'true' || 'false' }}
         run: |
           python3 - <<'PY'
-          import os, json, datetime, urllib.request
+          import os, re, json, datetime, urllib.request
           REPO = "orelmor/whitelistarr"
+          # immutable dev tags only, e.g. 1.9.0.dev4-a8402c8 (not :dev/:latest/:X.Y.Z)
+          DEV_RE = re.compile(r"\.dev\d+-")
           KEEP = 5
           DAYS = 30
           DRY = os.environ.get("DRY_RUN", "false") == "true"
@@ -79,7 +81,7 @@ jobs:
               tags += page["results"]
               url = page.get("next")
 
-          devs = sorted((t for t in tags if t["name"].startswith("dev-")),
+          devs = sorted((t for t in tags if DEV_RE.search(t["name"])),
                         key=lambda t: t["last_updated"], reverse=True)
           victims = [t for t in devs[KEEP:]
                      if datetime.datetime.fromisoformat(t["last_updated"].replace("Z", "+00:00")) < cutoff]
