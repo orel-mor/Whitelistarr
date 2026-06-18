@@ -32,12 +32,15 @@ jobs:
 
       - name: Resolve dev version
         id: ver
-        # Deterministic dev version with NO git tag / release: take the latest
-        # release tag, bump the patch, and append the build count since it.
-        # e.g. last release v1.2.0, 5 image builds since -> 1.2.1.dev5 (PEP 440,
-        # sorts after 1.2.0 and before 1.2.1). N counts only commits that touch the
-        # image (same paths as this workflow's trigger), so it tracks builds — a
-        # docs-only push doesn't bump it. Still git-derived, monotonic, reproducible.
+        # Computes two strings with NO git tag / release created:
+        #   version = PEP 440 dev version for the image's internal __version__,
+        #             e.g. 1.9.1.dev4 (next patch + build count; sorts after the
+        #             last release, before the next).
+        #   tag     = pretty, traceable Docker tag, e.g. dev-1.9.0-4-gabc1234
+        #             = dev-<last release>-<build count>-g<short sha>.
+        # BASE = last release; N = commits since it that touch the image (same
+        # paths as this workflow's trigger), so N tracks builds, not docs pushes.
+        # SHA pins the exact source commit (drop "-g${SHA}" if you want it shorter).
         run: |
           PATHS=(Dockerfile .dockerignore app pyproject.toml .github/workflows/dev.yml)
           if LAST=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null); then
@@ -47,8 +50,10 @@ jobs:
             BASE=0.0.0
             N=$(git rev-list HEAD --count -- "${PATHS[@]}")
           fi
+          SHA=$(git rev-parse --short HEAD)
           NEXT=$(echo "$BASE" | awk -F. '{printf "%d.%d.%d", $1, $2, $3 + 1}')
           echo "version=${NEXT}.dev${N}" >> "$GITHUB_OUTPUT"
+          echo "tag=dev-${BASE}-${N}-g${SHA}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v4
 
@@ -75,9 +80,9 @@ jobs:
             SETUPTOOLS_SCM_PRETEND_VERSION_FOR_WHITELISTARR=${{ steps.ver.outputs.version }}
           tags: |
             orelmor/whitelistarr:dev
-            orelmor/whitelistarr:${{ steps.ver.outputs.version }}
+            orelmor/whitelistarr:${{ steps.ver.outputs.tag }}
             ghcr.io/orel-mor/whitelistarr:dev
-            ghcr.io/orel-mor/whitelistarr:${{ steps.ver.outputs.version }}
+            ghcr.io/orel-mor/whitelistarr:${{ steps.ver.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
