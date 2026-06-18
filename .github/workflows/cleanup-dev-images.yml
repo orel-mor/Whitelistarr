@@ -3,8 +3,11 @@ name: Cleanup dev images
 # Prune old development images so the immutable :<release>.dev<build>-<sha> tags
 # don't pile up forever. Deletes dev tags older than 30 days from BOTH registries,
 # always keeping the newest few (so the rolling :dev and recent builds survive).
-# Never touches :latest or release (:X.Y.Z) tags. Runs weekly; a manual run
-# defaults to dry-run (preview) so you can confirm before anything is deleted.
+# On GHCR it also sweeps orphaned untagged manifests (the sha256:<digest> entries
+# left behind when a tag like :dev/:latest is moved to a newer build) — these
+# belong to no tag, so nothing references them. Never touches :latest or release
+# (:X.Y.Z) tags, nor the platform child manifests still referenced by a live tag.
+# Runs weekly; a manual run defaults to dry-run (preview) so you can confirm first.
 
 on:
   schedule:
@@ -22,7 +25,7 @@ concurrency:
 
 jobs:
   ghcr:
-    name: Prune GHCR dev images (>30d)
+    name: Prune GHCR dev + untagged images (>30d)
     runs-on: ubuntu-latest
     permissions:
       packages: write # delete versions of this repo's GHCR package
@@ -30,7 +33,8 @@ jobs:
       # Battle-tested pruner: handles pagination + manifest children. keep-n-most-
       # recent protects the newest builds (incl. the version that also carries the
       # rolling :dev tag) regardless of age.
-      - uses: snok/container-retention-policy@v3
+      - name: Prune immutable dev tags
+        uses: snok/container-retention-policy@v3
         with:
           account: orel-mor
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -38,6 +42,23 @@ jobs:
           image-tags: "*.dev*-*" # immutable dev tags (1.9.0.dev4-<sha>); not :dev/:latest/:X.Y.Z
           cut-off: 1mo
           keep-n-most-recent: 5
+          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+
+      # Sweep orphaned untagged manifests (the sha256:<digest> versions GHCR shows
+      # with no tag). tag-selection: untagged restricts deletion to versions that
+      # carry no tag; the action keeps any platform child manifest still referenced
+      # by a retained tagged image (so multi-arch :latest/:dev/:X.Y.Z stay intact).
+      # keep-n-most-recent adds headroom against racing an in-flight push.
+      - name: Prune orphaned untagged manifests
+        uses: snok/container-retention-policy@v3
+        with:
+          account: orel-mor
+          token: ${{ secrets.GITHUB_TOKEN }}
+          image-names: "whitelistarr"
+          image-tags: "*"
+          tag-selection: untagged
+          cut-off: 1mo
+          keep-n-most-recent: 10
           dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
 
   dockerhub:
