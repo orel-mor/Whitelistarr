@@ -190,3 +190,26 @@ jobs:
           apprise -t "🚀 Whitelistarr v$VERSION released" \
                   -b "Stable image published: orelmor/whitelistarr:latest and :$VERSION (+ GHCR). See the GitHub Release for the changelog." \
                   "$APPRISE_URL"
+
+      # Report the real release to the run summary (dry runs already write their
+      # own preview above).
+      - name: Summary
+        if: ${{ !inputs.dry_run }}
+        env:
+          RELEASED: ${{ steps.release.outputs.released }}
+          VERSION: ${{ steps.release.outputs.version }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          if [ "$RELEASED" = "true" ]; then
+            {
+              echo "## 🚀 Released v${VERSION}"
+              echo ""
+              echo "| | |"
+              echo "|---|---|"
+              echo "| Version | \`${VERSION}\` |"
+              echo "| Images | \`orelmor/whitelistarr:latest\` + \`:${VERSION}\` (+ GHCR) |"
+              echo "| Release | ${{ github.server_url }}/${{ github.repository }}/releases/tag/${TAG} |"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## No release cut — no release-worthy commits since the last tag." >> "$GITHUB_STEP_SUMMARY"
+          fi
