@@ -2,22 +2,31 @@ from app.clients.notify import Notifier, ensure_discord_markdown
 
 
 class TestEnsureDiscordMarkdown:
-    def test_appends_format_and_fields_to_plain_discord_url(self):
+    def test_appends_format_fields_and_avatar_to_plain_discord_url(self):
+        # avatar=no stops Apprise overriding the webhook avatar with its own themed
+        # icon (the megaphone), so Discord shows the user's configured bot icon.
         assert (
             ensure_discord_markdown("discord://id/token")
-            == "discord://id/token?format=markdown&fields=no"
+            == "discord://id/token?format=markdown&fields=no&avatar=no"
         )
 
-    def test_uses_ampersand_when_query_exists(self):
+    def test_uses_ampersand_when_query_exists_and_keeps_explicit_avatar(self):
         assert (
             ensure_discord_markdown("discord://id/token?avatar=no")
             == "discord://id/token?avatar=no&format=markdown&fields=no"
         )
 
-    def test_leaves_existing_params_untouched(self):
+    def test_respects_explicit_avatar_yes(self):
+        # If the user explicitly opts into Apprise's avatar, don't override it.
+        assert (
+            ensure_discord_markdown("discord://id/token?avatar=yes")
+            == "discord://id/token?avatar=yes&format=markdown&fields=no"
+        )
+
+    def test_leaves_existing_format_fields_untouched_but_adds_avatar(self):
         assert (
             ensure_discord_markdown("discord://id/token?format=text&fields=yes")
-            == "discord://id/token?format=text&fields=yes"
+            == "discord://id/token?format=text&fields=yes&avatar=no"
         )
 
     def test_ignores_non_discord_urls(self):
