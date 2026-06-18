@@ -197,13 +197,24 @@
             </div>
           </div>
 
-          <div class="group">
-            <h2>Actions</h2>
-            <div class="actions-row">
-              <button class="btn" @click="action('test-notification')">Send test notification</button>
-              <button class="btn" @click="action('sweep')">Run sweep now</button>
-              <button class="btn danger" @click="action('reverse')">Run reverse (remove all labels)</button>
-            </div>
+          <div class="group" x-show="data">
+            <h2>Activity log</h2>
+            <template x-if="histList().length === 0">
+              <p class="muted">No actions yet. Runs that change something — and any
+                action you trigger — show up here.</p>
+            </template>
+            <table class="activity" x-show="histList().length">
+              <thead><tr><th>Action</th><th>Result</th><th>When</th></tr></thead>
+              <tbody>
+                <template x-for="e in histList()" :key="e.id">
+                  <tr>
+                    <td x-text="actionTitle(e.action)"></td>
+                    <td x-text="formatResult(e)"></td>
+                    <td class="muted" x-text="relativeTime(e.at)"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
           </div>
         </section>
         <section x-show="$store.app.route==='settings'" x-data="settings()" x-init="load()">
@@ -250,6 +261,17 @@
 
           <div x-ref="core" class="groups"></div>
           <div x-ref="adv" class="groups" x-show="showAdvanced"></div>
+
+          <div class="group" x-data="actionsView()">
+            <h2>Actions</h2>
+            <p class="muted">Run these on demand. Results appear in the Activity log on Status.</p>
+            <div class="actions-row">
+              <button class="btn" :disabled="busy" @click="action('test-notification')">Send test notification</button>
+              <button class="btn" :disabled="busy" @click="action('sweep')">Run sweep now</button>
+              <button class="btn danger" :disabled="busy" @click="action('reverse')">Run reverse (remove all labels)</button>
+            </div>
+          </div>
+
           <div class="savebar">
             <span class="muted" x-text="saving ? 'Saving…' : ''"></span>
             <button class="btn primary" @click="save()">Save</button>

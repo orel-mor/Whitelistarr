@@ -73,6 +73,13 @@ def create_webui_router(
     keys = set(field_keys())
     secrets = set(secret_keys())
 
+    def _log_action(action: str, summary: dict[str, Any]) -> None:
+        # Manual UI actions always appear in the activity log (history=True), even
+        # when they change nothing. Guarded so test runtimes without a tracker work.
+        tracker = getattr(runtime, "tracker", None)
+        if tracker is not None:
+            tracker.record(action, summary, history=True)
+
     @router.get("/")
     async def index() -> Response:
         return _static_response("index.html")
@@ -131,7 +138,9 @@ def create_webui_router(
         ls = runtime.label_sync
         if ls is None:
             return JSONResponse({"error": "Not configured"}, status_code=409)
-        return JSONResponse(ls.sweep())
+        result = ls.sweep()
+        _log_action("sweep", result)
+        return JSONResponse(result)
 
     @router.post("/api/actions/reverse")
     async def action_reverse(request: Request) -> Response:
@@ -144,7 +153,9 @@ def create_webui_router(
             body = {}
         if not body.get("confirm"):
             return JSONResponse({"error": "confirm required"}, status_code=400)
-        return JSONResponse(ls.reverse_sweep())
+        result = ls.reverse_sweep()
+        _log_action("reverse", result)
+        return JSONResponse(result)
 
     @router.post("/api/actions/test-notification")
     async def action_test() -> Response:
@@ -153,7 +164,9 @@ def create_webui_router(
         settings = runtime.settings
         if not settings.apprise_url_list:
             return JSONResponse({"error": "Not configured"}, status_code=409)
-        return JSONResponse({"ok": bool(_send_test_notification(settings))})
+        ok = bool(_send_test_notification(settings))
+        _log_action("test-notification", {"ok": ok})
+        return JSONResponse({"ok": ok})
 
     _PROBE_SERVICES = ("plex", "radarr", "sonarr", "seerr", "tautulli")
     _conn_cache: dict[str, Any] = {"at": 0.0, "data": None}
@@ -198,6 +211,7 @@ def create_webui_router(
             "errors": settings.runtime_errors(),
             "jobs": jobs,
             "last": runtime.tracker.snapshot(),
+            "history": runtime.tracker.history(),
             "connections": connections,
             "label_map": settings.label_map,
         }

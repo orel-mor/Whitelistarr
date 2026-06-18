@@ -153,6 +153,47 @@ def test_status_includes_readonly_label_map(tmp_path):
     assert body["label_map"] == {"a": "b"}
 
 
+def test_status_includes_activity_history(tmp_path):
+    body = _client(tmp_path).get("/api/status").json()
+    assert isinstance(body["history"], list)
+
+
+def _actions_client(tmp_path, label_sync):
+    from app.status import StatusTracker
+
+    tracker = StatusTracker()
+
+    class RT:
+        settings = Settings(plex_url="http://p", plex_token="t", tag_label_map="a:b")
+        components = None
+
+        def __init__(self):
+            self.tracker = tracker
+            self.label_sync = label_sync
+
+    store = ConfigStore(str(tmp_path / "c.json"), KEY)
+    app = FastAPI()
+    app.include_router(create_webui_router(runtime=RT(), store=store))
+    return TestClient(app), tracker
+
+
+def test_manual_sweep_appends_to_activity_history(tmp_path):
+    ls = SimpleNamespace(sweep=lambda: {"processed": 3, "changed": 1})
+    client, tracker = _actions_client(tmp_path, ls)
+    client.post("/api/actions/sweep")
+    hist = client.get("/api/status").json()["history"]
+    assert hist[0]["action"] == "sweep"
+    assert hist[0]["changed"] == 1
+
+
+def test_manual_noop_sweep_still_logged(tmp_path):
+    # A user-clicked sweep that changes nothing must still show feedback.
+    ls = SimpleNamespace(sweep=lambda: {"processed": 3, "changed": 0})
+    client, _ = _actions_client(tmp_path, ls)
+    client.post("/api/actions/sweep")
+    assert client.get("/api/status").json()["history"][0]["action"] == "sweep"
+
+
 def test_status_unconfigured_no_components(tmp_path):
     body = _client(tmp_path, configured=False, components=False).get("/api/status").json()
     assert body["configured"] is False

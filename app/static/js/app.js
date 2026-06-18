@@ -230,12 +230,37 @@ document.addEventListener("alpine:init", () => {
       const what = last.added ? `${last.added} added` : "none";
       return `${what}${titles ? " (" + titles + ")" : ""}, ${relativeTime(last.at)}`;
     },
+    histList() {
+      return (this.data && this.data.history) || [];
+    },
+    actionTitle(action) {
+      return ({
+        sweep: "Sweep", reverse: "Reverse", reactive: "Reactive poll",
+        watch_scan: "Watch scan", "test-notification": "Test notification",
+      })[action] || action;
+    },
+    formatResult(e) {
+      if (e.action === "sweep" || e.action === "reverse")
+        return `${e.changed} changed of ${e.processed}`;
+      if (e.action === "reactive") {
+        const titles = (e.added_titles || []).slice(0, 3).join(", ");
+        return `${e.tag_changes} tag change(s), ${e.added} added` + (titles ? ` (${titles})` : "");
+      }
+      if (e.action === "watch_scan") return `${e.notified} notified of ${e.processed}`;
+      if (e.action === "test-notification") return e.ok ? "sent" : "failed";
+      return "";
+    },
+  }));
+
+  Alpine.data("actionsView", () => ({
+    busy: false,
     async action(name) {
       if (name === "reverse" && !confirm("Remove ALL managed labels from every Plex item?")) return;
+      this.busy = true;
       const r = await apiPost(`/api/actions/${name}`, name === "reverse" ? { confirm: true } : {});
+      this.busy = false;
       this.$store.app.toast(`${name}: ${r.ok ? JSON.stringify(r.body) : "failed " + r.status}`,
         r.ok ? "ok" : "err");
-      this.refresh();
     },
   }));
 
