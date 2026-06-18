@@ -267,7 +267,7 @@ document.addEventListener("alpine:init", () => {
       if (!r.ok || !r.body) return;
       if (r.body.lines.length) {
         this.lines.push(...r.body.lines);
-        if (this.lines.length > 1000) this.lines.splice(0, this.lines.length - 1000);
+        if (this.lines.length > 100) this.lines.splice(0, this.lines.length - 100);
         this.lastId = r.body.last_id;
         this.$nextTick(() => this.scrollDown());
       }

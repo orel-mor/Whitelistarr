@@ -16,7 +16,7 @@ from typing import Any
 
 
 class LogBuffer:
-    def __init__(self, capacity: int = 2000) -> None:
+    def __init__(self, capacity: int = 100) -> None:
         self._records: deque[dict[str, Any]] = deque(maxlen=capacity)
         self._lock = threading.Lock()
         self._next_id = 1

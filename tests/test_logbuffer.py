@@ -7,6 +7,13 @@ def _record(level, msg):
     return logging.LogRecord("test", level, __file__, 1, msg, None, None)
 
 
+def test_default_buffer_retains_only_latest_100():
+    from app.logbuffer import LOG_BUFFER, LogBuffer
+
+    assert LogBuffer()._records.maxlen == 100
+    assert LOG_BUFFER._records.maxlen == 100
+
+
 def test_keeps_last_n_records():
     buf = LogBuffer(capacity=3)
     for i in range(5):
