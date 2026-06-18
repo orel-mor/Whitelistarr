@@ -49,7 +49,7 @@ jobs:
           python-version: "3.12"
       - name: Prune
         env:
-          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DH_USER: orelmor
           DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && 'true' || 'false' }}
         run: |
