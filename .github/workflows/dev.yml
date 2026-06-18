@@ -1,10 +1,11 @@
 name: Dev
 
 # Trunk-based dev channel. Every push to `main` builds and publishes the latest
-# development image tagged :dev (+ :dev-<sha>) so you can test merged code before
-# cutting a stable release (see release.yml). No version bump, no tag, no GitHub
-# Release — just an image. amd64-only to keep per-merge CI fast; stable releases
-# are multi-arch. Skips docs-only pushes (paths filter).
+# development image as :dev (rolling) plus an immutable version tag like
+# :1.2.1.dev5 (next patch of the last release + commits since), so you can test
+# and pin merged code before cutting a stable release (see release.yml). No git
+# tag, no GitHub Release — just images. amd64-only to keep per-merge CI fast;
+# stable releases are multi-arch. Skips docs-only pushes (paths filter).
 
 on:
   push:
@@ -27,17 +28,25 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 0 # tags needed for setuptools-scm version
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
+          fetch-depth: 0 # tags needed to compute the dev version
 
       - name: Resolve dev version
         id: ver
+        # Deterministic dev version with NO git tag / release: take the latest
+        # release tag, bump the patch, and append the commit distance since it.
+        # e.g. last release v1.2.0, 5 commits since -> 1.2.1.dev5 (PEP 440, sorts
+        # after 1.2.0 and before 1.2.1). N is commit distance, so it's monotonic
+        # and reproducible (may skip numbers for docs-only pushes that build no image).
         run: |
-          pip install --quiet setuptools-scm
-          echo "version=$(python -m setuptools_scm)" >> "$GITHUB_OUTPUT"
+          if LAST=$(git describe --tags --abbrev=0 2>/dev/null); then
+            BASE=${LAST#v}
+            N=$(git rev-list "${LAST}..HEAD" --count)
+          else
+            BASE=0.0.0
+            N=$(git rev-list HEAD --count)
+          fi
+          NEXT=$(echo "$BASE" | awk -F. '{printf "%d.%d.%d", $1, $2, $3 + 1}')
+          echo "version=${NEXT}.dev${N}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v4
 
@@ -64,9 +73,9 @@ jobs:
             SETUPTOOLS_SCM_PRETEND_VERSION_FOR_WHITELISTARR=${{ steps.ver.outputs.version }}
           tags: |
             orelmor/whitelistarr:dev
-            orelmor/whitelistarr:dev-${{ github.sha }}
+            orelmor/whitelistarr:${{ steps.ver.outputs.version }}
             ghcr.io/orel-mor/whitelistarr:dev
-            ghcr.io/orel-mor/whitelistarr:dev-${{ github.sha }}
+            ghcr.io/orel-mor/whitelistarr:${{ steps.ver.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
