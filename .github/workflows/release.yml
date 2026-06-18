@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Preview only — compute version + notes, publish nothing"
+        description: "Dry run"
         type: boolean
         default: true
 
@@ -131,14 +131,10 @@ jobs:
       - name: Label released PRs + issues
         if: ${{ !inputs.dry_run && steps.release.outputs.released == 'true' }}
         uses: actions/github-script@v9
-        env:
-          VERSION: ${{ steps.release.outputs.version }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
-            const version = process.env.VERSION;
-            const note = `🚀 Released in **v${version}** — image \`orelmor/whitelistarr:latest\` + \`:${version}\`.`;
             async function ensureLabel(name, color, description) {
               try { await github.rest.issues.getLabel({ owner, repo, name }); }
               catch (e) { if (e.status === 404) await github.rest.issues.createLabel({ owner, repo, name, color, description }); }
@@ -161,7 +157,6 @@ jobs:
               if (set.has(number)) return;
               set.add(number);
               await github.rest.issues.addLabels({ owner, repo, issue_number: number, labels: ['released'] });
-              await github.rest.issues.createComment({ owner, repo, issue_number: number, body: note });
             }
             for (const sha of shas) {
               const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner, repo, commit_sha: sha });
@@ -212,5 +207,5 @@ jobs:
               echo "| Release | ${{ github.server_url }}/${{ github.repository }}/releases/tag/${TAG} |"
             } >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "## No release cut — no release-worthy commits since the last tag." >> "$GITHUB_STEP_SUMMARY"
+            echo "## 🛑 No release cut — no release-worthy commits since the last tag." >> "$GITHUB_STEP_SUMMARY"
           fi

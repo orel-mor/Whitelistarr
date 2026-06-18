@@ -118,9 +118,12 @@ jobs:
           summary = os.environ.get("GITHUB_STEP_SUMMARY")
           if summary:
               with open(summary, "a") as fh:
-                  fh.write(f"## Docker Hub dev cleanup ({'dry run — nothing deleted' if DRY else 'deleted'})\n\n")
+                  fh.write(f"## 🧹 Docker Hub dev cleanup ({'dry run — nothing deleted' if DRY else 'deleted'})\n\n")
+                  fh.write("| | |\n|---|---|\n")
+                  fh.write(f"| Dev tags total | `{len(devs)}` |\n")
+                  fh.write(f"| {'Would prune' if DRY else 'Pruned'} | `{len(victims)}` |\n")
+                  fh.write(f"| Kept | newest {KEEP} + any <{DAYS}d |\n")
                   if victims:
+                      fh.write(f"\n### {'Would prune' if DRY else 'Pruned'} tags\n\n")
                       fh.write("\n".join(f"- `{t['name']}` ({t['last_updated']})" for t in victims) + "\n")
-                  else:
-                      fh.write(f"Nothing to prune (none older than {DAYS}d beyond the newest {KEEP}).\n")
           PY
