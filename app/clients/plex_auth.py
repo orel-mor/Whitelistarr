@@ -64,6 +64,19 @@ class PlexAuth:
             resp.raise_for_status()
             return resp.json().get("authToken") or None
 
+    def account(self, token: str) -> str | None:
+        """Return the signed-in Plex account's display name (or None).
+
+        Used to show "Connected — <user>" in the UI. Best-effort: callers treat a
+        failure as "connected, name unknown".
+        """
+        headers = {**self._headers(), "X-Plex-Token": token}
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.get(f"{PLEX_TV}/api/v2/user", headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+        return data.get("username") or data.get("title") or data.get("friendlyName") or None
+
     def list_servers(self, token: str) -> list[dict[str, Any]]:
         headers = {**self._headers(), "X-Plex-Token": token}
         with httpx.Client(timeout=30.0) as client:

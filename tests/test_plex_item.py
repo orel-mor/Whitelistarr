@@ -109,6 +109,26 @@ def _client_with(sections):
     return client
 
 
+def test_list_libraries_returns_movie_and_show_only():
+    # Music/photo libraries can't be labelled or scanned, so the picker never
+    # lists them. The section filter is ignored: every pickable library is shown.
+    sections = [
+        FakeSection("movie", "Movies", []),
+        FakeSection("show", "TV Shows", []),
+        FakeSection("movie", "General Videos", []),
+        FakeSection("artist", "Music", []),
+        FakeSection("photo", "Photos", []),
+    ]
+    client = _client_with(sections)
+    client._section_filter = {"Movies"}  # must NOT restrict the listing
+    libs = client.list_libraries()
+    assert libs == [
+        {"title": "Movies", "type": "movie"},
+        {"title": "TV Shows", "type": "show"},
+        {"title": "General Videos", "type": "movie"},
+    ]
+
+
 def test_recently_added_returns_items_newer_than_watermark():
     t0 = datetime(2026, 1, 1)
     section = FakeSection("movie", "Movies", [

@@ -53,6 +53,31 @@ def test_list_servers_filters_and_shapes():
 
 
 @respx.mock
+def test_account_returns_username():
+    respx.get(f"{PLEX}/api/v2/user").mock(
+        return_value=httpx.Response(200, json={"username": "orel", "title": "Orel"})
+    )
+    assert PlexAuth(client_id="cid").account("tok-xyz") == "orel"
+
+
+@respx.mock
+def test_account_falls_back_to_title_then_none():
+    respx.get(f"{PLEX}/api/v2/user").mock(
+        return_value=httpx.Response(200, json={"title": "Orel"})
+    )
+    assert PlexAuth(client_id="cid").account("tok-xyz") == "Orel"
+
+
+@respx.mock
+def test_account_sends_token_header():
+    route = respx.get(f"{PLEX}/api/v2/user").mock(
+        return_value=httpx.Response(200, json={"username": "orel"})
+    )
+    PlexAuth(client_id="cid").account("tok-xyz")
+    assert route.calls.last.request.headers["X-Plex-Token"] == "tok-xyz"
+
+
+@respx.mock
 def test_requests_send_client_identifier_header():
     route = respx.post(f"{PLEX}/api/v2/pins").mock(
         return_value=httpx.Response(201, json={"id": 1, "code": "z"})

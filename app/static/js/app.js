@@ -10,6 +10,11 @@ const el = (tag, props = {}, ...kids) => {
 // key -> {field, get(), wrap, depends_on}. Rebuilt each settings render.
 const SETTINGS_INPUTS = {};
 
+// Plex libraries fetched live for the "libraries" field type, plus the re-render
+// closures that rebuild those checkbox sets when a fresh list arrives.
+let PLEX_LIBRARIES = [];
+const LIBRARY_RERENDERERS = [];
+
 // Per-browser view preferences (which sections are expanded) so the Settings page
 // reopens the way the user last saved it. Pure UI — never sent to the server.
 const UI_PREFS_KEY = "wl.settings.ui";
@@ -92,6 +97,31 @@ function renderField(field, value) {
     });
     wrap.append(row);
     getter = () => boxes.filter(([, cb]) => cb.checked).map(([o]) => o).join(",");
+  } else if (field.type === "libraries") {
+    // Dynamic checkbox set: options come from PLEX_LIBRARIES (fetched live from the
+    // connected server). A saved pick whose library isn't currently listed (server
+    // offline, renamed) is still shown so it isn't silently dropped. Empty = all.
+    const selected = new Set(String(value || "").split(",").map((s) => s.trim()).filter(Boolean));
+    const row = el("div", { className: "multi" });
+    const render = () => {
+      row.innerHTML = "";
+      const titles = PLEX_LIBRARIES.map((l) => l.title);
+      for (const t of selected) if (!titles.includes(t)) titles.push(t);
+      if (!titles.length) {
+        row.append(el("p", { className: "help muted", textContent:
+          "Sign in to Plex, then Test connection to list libraries." }));
+        return;
+      }
+      for (const t of titles) {
+        const cb = el("input", { type: "checkbox", checked: selected.has(t) });
+        cb.addEventListener("change", () => (cb.checked ? selected.add(t) : selected.delete(t)));
+        row.append(el("label", {}, cb, " " + t));
+      }
+    };
+    render();
+    LIBRARY_RERENDERERS.push(render);
+    wrap.append(row);
+    getter = () => Array.from(selected).join(",");
   } else if (field.type === "keyvalue") {
     const container = el("div");
     const addRow = (k = "", v = "") => {
@@ -159,6 +189,7 @@ const TIER_REF = { core: "core", notify: "notify", advanced: "adv" };
 
 function renderSettingsForm(cmp) {
   for (const k of Object.keys(SETTINGS_INPUTS)) delete SETTINGS_INPUTS[k];
+  LIBRARY_RERENDERERS.length = 0;
   const refs = { core: cmp.$refs.core, notify: cmp.$refs.notify, adv: cmp.$refs.adv };
   for (const c of Object.values(refs)) c.innerHTML = "";
 
@@ -224,7 +255,20 @@ document.addEventListener("alpine:init", () => {
         renderSettingsForm(this);
         this.captureBaseline();
         this.registerGuard();
+        this.refreshLibraries();  // populate the Plex library checkboxes on entry
       });
+    },
+    async refreshLibraries() {
+      // Pull the live library list and rebuild every "libraries" checkbox set.
+      // Called on tab entry, after a Plex test/connect — keeps the picker current.
+      const r = await api("/api/plex/libraries");
+      PLEX_LIBRARIES = (r.body && r.body.libraries) || [];
+      LIBRARY_RERENDERERS.forEach((fn) => fn());
+    },
+    onPlexConnected() {
+      // A sign-in or disconnect inside the Plex group changed Plex creds; refresh
+      // the library list to match the now-connected (or cleared) server.
+      this.refreshLibraries();
     },
     captureBaseline() {
       this._baseline = JSON.stringify(collectSettingsPayload());
@@ -297,6 +341,8 @@ document.addEventListener("alpine:init", () => {
       const d = r.body || {};
       this.$store.app.toast(`${service}: ${d.ok ? "connected ✓ " : "failed ✗ "}${d.detail || ""}`,
         d.ok ? "ok" : "err");
+      // A successful Plex probe means the library list may now be reachable.
+      if (service === "plex" && d.ok) this.refreshLibraries();
     },
   }));
 
@@ -377,7 +423,7 @@ document.addEventListener("alpine:init", () => {
   Alpine.data("logsView", () => ({
     // Portainer-style: each refresh fetches the last `tailN` lines and replaces the
     // view. Bigger tailN = more history shown (bounded by the in-memory buffer).
-    lines: [], level: "", auto: true, intervalSec: 3, tailN: 100, timer: null,
+    lines: [], level: "", auto: true, intervalSec: 3, tailN: 1000, timer: null,
     async start() {
       await this.tick();
       this.schedule();
@@ -400,7 +446,7 @@ document.addEventListener("alpine:init", () => {
       }, secs * 1000);
     },
     async tick() {
-      const n = Math.max(1, Number(this.tailN) || 100);
+      const n = Math.max(1, Number(this.tailN) || 1000);
       const q = `/api/logs?tail=${n}` + (this.level ? `&level=${this.level}` : "");
       const r = await api(q);
       if (!r.ok || !r.body) return;
@@ -411,10 +457,21 @@ document.addEventListener("alpine:init", () => {
     logTime(iso) { return (iso || "").replace("T", " ").slice(11, 19); },
   }));
 
-  Alpine.data("plexSignIn", () => ({
+  Alpine.data("plexSignIn", (opts = {}) => ({
+    // withLibraries: after connecting, show an inline library picker (onboarding)
+    // instead of finishing immediately. Settings uses the standalone picker instead.
+    withLibraries: !!opts.withLibraries,
     phase: "idle", pinId: null, servers: [], chosen: null, error: "", authUrl: "",
-    applying: false,
+    applying: false, user: "", libraries: [], libSel: {},
     _win: null,
+    async checkConnected() {
+      // Settings: if Plex is already connected, show "Connected — <user>" + a
+      // Disconnect button instead of the sign-in button.
+      const r = await api("/api/plex/account");
+      if (r.ok && r.body && r.body.connected) {
+        this.phase = "connected"; this.user = r.body.username || "";
+      }
+    },
     async start() {
       this.error = ""; this.phase = "pending"; this.authUrl = "";
       const r = await apiPost("/api/plex/pin");
@@ -445,11 +502,33 @@ document.addEventListener("alpine:init", () => {
       this.error = ""; this.chosen = uri; this.applying = true;
       const r = await apiPost("/api/plex/apply", { pin_id: this.pinId, uri });
       if (r.ok && r.body.ok !== false) {
-        this.phase = "done"; this.$dispatch("plex-connected");
+        if (this.withLibraries) { await this.loadLibraries(); this.applying = false; }
+        else { this.phase = "done"; this.$dispatch("plex-connected"); }
       } else {
         this.applying = false; this.chosen = null;
         this.error = (r.body && r.body.error) || "Apply failed";
       }
+    },
+    async loadLibraries() {
+      const r = await api("/api/plex/libraries");
+      this.libraries = (r.body && r.body.libraries) || [];
+      this.libSel = {};
+      this.libraries.forEach((l) => (this.libSel[l.title] = true));  // default: all checked
+      this.phase = "libraries";
+    },
+    async saveLibraries() {
+      // All checked (or nothing to pick) keeps the "all libraries" default (empty);
+      // otherwise persist the chosen titles so the unchecked ones are excluded.
+      const chosen = this.libraries.filter((l) => this.libSel[l.title]).map((l) => l.title);
+      const all = chosen.length === this.libraries.length;
+      await apiPost("/api/config", { plex_sections: all ? "" : chosen.join(",") });
+      this.phase = "done"; this.$dispatch("plex-connected");
+    },
+    async disconnect() {
+      if (!confirm("Disconnect Plex? Whitelistarr will stop syncing until you sign in again.")) return;
+      await apiPost("/api/plex/disconnect", {});
+      this.phase = "idle"; this.user = ""; this.chosen = null;
+      this.$dispatch("plex-connected");  // let Settings refresh its library picker
     },
   }));
 
@@ -458,8 +537,8 @@ document.addEventListener("alpine:init", () => {
     steps: ["Welcome", "Plex", "Radarr & Sonarr", "Tags", "Notifications", "Done"],
     radarr: { url: "", key: "", ok: null }, sonarr: { url: "", key: "", ok: null },
     tagRows: [{ tag: "", label: "" }],
-    notify: { enabled: false, tautulliUrl: "", tautulliKey: "",
-              seerrUrl: "", seerrKey: "", apprise: "" },
+    notify: { enabled: false, tautulliUrl: "", tautulliKey: "", tautulliOk: null,
+              seerrUrl: "", seerrKey: "", seerrOk: null, apprise: "" },
     next() { if (this.step < this.last) this.step++; },
     back() { if (this.step > 0) this.step--; },
     async saveArr(which) {
@@ -471,6 +550,18 @@ document.addEventListener("alpine:init", () => {
       this.$store.app.toast(`${which}: ${f.ok ? "connected ✓" : "failed ✗"}`, f.ok ? "ok" : "err");
     },
     canLeaveArr() { return this.radarr.ok || this.sonarr.ok; },
+    async testNotifyConn(which) {
+      // Save the typed creds, then probe — mirrors saveArr so the user can verify
+      // Tautulli/Seerr before leaving the Notifications step.
+      const f = which === "tautulli"
+        ? { url: this.notify.tautulliUrl, key: this.notify.tautulliKey }
+        : { url: this.notify.seerrUrl, key: this.notify.seerrKey };
+      await apiPost("/api/config", { [`${which}_url`]: f.url, [`${which}_api_key`]: f.key });
+      const r = await apiPost(`/api/connections/test/${which}`, { url: f.url, api_key: f.key });
+      const ok = !!(r.body && r.body.ok);
+      this.notify[`${which}Ok`] = ok;
+      this.$store.app.toast(`${which}: ${ok ? "connected ✓" : "failed ✗"}`, ok ? "ok" : "err");
+    },
     addTagRow() { this.tagRows.push({ tag: "", label: "" }); },
     removeTagRow(i) { this.tagRows.splice(i, 1); if (!this.tagRows.length) this.addTagRow(); },
     _tagMap() {

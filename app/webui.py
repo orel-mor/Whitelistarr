@@ -359,4 +359,48 @@ def create_webui_router(
              "restart_required": result.restart_required}
         )
 
+    @router.get("/api/plex/libraries")
+    async def plex_libraries() -> Response:
+        # List the labelable Plex libraries from the live (saved) component so the
+        # UI can render the section picker. Empty list when Plex isn't connected
+        # yet or the probe fails — the UI just shows nothing to pick.
+        comps = getattr(runtime, "components", None)
+        plex = getattr(comps, "plex", None) if comps is not None else None
+        if plex is None or not hasattr(plex, "list_libraries"):
+            return JSONResponse({"libraries": []})
+        try:
+            libs = await asyncio.wait_for(
+                run_in_threadpool(plex.list_libraries), PROBE_TIMEOUT
+            )
+        except Exception:  # noqa: BLE001 - log server-side; UI degrades to empty
+            log.warning("Plex libraries fetch failed", exc_info=True)
+            return JSONResponse({"libraries": []})
+        return JSONResponse({"libraries": libs})
+
+    @router.get("/api/plex/account")
+    async def plex_account() -> Response:
+        settings = runtime.settings
+        connected = bool(getattr(settings, "plex_url", "") and getattr(settings, "plex_token", ""))
+        username = ""
+        if connected:
+            try:
+                username = await asyncio.wait_for(
+                    run_in_threadpool(_auth().account, settings.plex_token), PROBE_TIMEOUT
+                ) or ""
+            except Exception:  # noqa: BLE001 - connected but name unknown is fine
+                log.warning("Plex account fetch failed", exc_info=True)
+        return JSONResponse({"connected": connected, "username": username})
+
+    @router.post("/api/plex/disconnect")
+    async def plex_disconnect() -> Response:
+        # Local disconnect: forget the Plex URL + token so the app stops talking to
+        # Plex. The token itself stays valid on plex.tv. Library picks (plex_sections)
+        # are kept so re-connecting the same server restores them.
+        candidate = store.load() if store and store.exists() else {}
+        candidate["plex_url"] = ""
+        candidate["plex_token"] = ""
+        store.save(candidate)
+        result = runtime.reload(Settings(**candidate))
+        return JSONResponse({"ok": result.ok, "error": result.error})
+
     return router
