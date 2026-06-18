@@ -16,8 +16,11 @@ def ensure_discord_markdown(url: str) -> str:
       markdown output mode; ``body_format`` at notify time doesn't control this).
     - ``fields=no`` keeps our markdown in the embed description instead of letting
       Apprise force every section into a code-block field.
+    - ``avatar=no`` stops Apprise from overriding the webhook avatar with its own
+      notify-type icon (the generic megaphone), so Discord shows the bot icon the
+      user configured on the webhook — matching how other apps appear.
 
-    Other services are left untouched.
+    Each is only added when the user hasn't set it. Other services are untouched.
     """
     if not url.startswith("discord://"):
         return url
@@ -26,6 +29,8 @@ def ensure_discord_markdown(url: str) -> str:
         extra.append("format=markdown")
     if "fields=" not in url:
         extra.append("fields=no")
+    if "avatar=" not in url:
+        extra.append("avatar=no")
     if not extra:
         return url
     sep = "&" if "?" in url else "?"
