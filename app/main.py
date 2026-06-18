@@ -117,9 +117,13 @@ def build_components(settings: Settings, tracker: Any | None = None) -> Componen
         notify_labeled=notify_labeled,
     )
 
+    # Build the notification-side clients whenever a URL is configured (not only
+    # when feature_notify is on) so the UI can probe them and show their status
+    # before notifications are enabled. They connect lazily, so this is cheap.
     seerr = tautulli = None
-    if settings.feature_notify:
+    if settings.seerr_url or settings.feature_notify:
         seerr = SeerrClient(settings.seerr_url, settings.seerr_api_key)
+    if settings.tautulli_url or settings.feature_notify:
         tautulli = TautulliClient(settings.tautulli_url, settings.tautulli_api_key)
 
     watch_monitor = None
