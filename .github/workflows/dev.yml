@@ -84,6 +84,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push image
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -96,3 +97,21 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
+
+      # Report what was published to the run summary (only after a successful push).
+      - name: Summary
+        run: |
+          {
+            echo "## 🐳 Dev image published"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Version (\`/health\`) | \`${{ steps.ver.outputs.version }}\` |"
+            echo "| Commit | \`${{ github.sha }}\` |"
+            echo "| Digest | \`${{ steps.build.outputs.digest }}\` |"
+            echo ""
+            echo "### Tags"
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

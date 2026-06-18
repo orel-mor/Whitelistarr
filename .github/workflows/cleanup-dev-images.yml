@@ -1,6 +1,6 @@
 name: Cleanup dev images
 
-# Prune old development images so the immutable :dev-<release>-<build>-g<sha> tags
+# Prune old development images so the immutable :<release>.dev<build>-<sha> tags
 # don't pile up forever. Deletes dev tags older than 30 days from BOTH registries,
 # always keeping the newest few (so the rolling :dev and recent builds survive).
 # Never touches :latest or release (:X.Y.Z) tags. Runs weekly; a manual run
@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   ghcr:
-    name: Prune GHCR dev-* (>30d)
+    name: Prune GHCR dev images (>30d)
     runs-on: ubuntu-latest
     permissions:
       packages: write # delete versions of this repo's GHCR package
@@ -41,7 +41,7 @@ jobs:
           dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
 
   dockerhub:
-    name: Prune Docker Hub dev-* (>30d)
+    name: Prune Docker Hub dev images (>30d)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/setup-python@v6
@@ -93,4 +93,13 @@ jobs:
                        method="DELETE", headers=H)
           print(f"{len(victims)} tag(s) {'would be ' if DRY else ''}deleted "
                 f"({len(devs)} dev tags total, keeping newest {KEEP} + any <{DAYS}d).")
+
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a") as fh:
+                  fh.write(f"## Docker Hub dev cleanup ({'dry run — nothing deleted' if DRY else 'deleted'})\n\n")
+                  if victims:
+                      fh.write("\n".join(f"- `{t['name']}` ({t['last_updated']})" for t in victims) + "\n")
+                  else:
+                      fh.write(f"Nothing to prune (none older than {DAYS}d beyond the newest {KEEP}).\n")
           PY
