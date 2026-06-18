@@ -86,12 +86,31 @@ def _make_test_client(service: str, url: str, key: str) -> tuple[Any, bool]:
     return None, False
 
 
+def _make_plex_client(url: str, token: str) -> Any:
+    """Build a throwaway Plex client from saved creds for read-only listing.
+
+    Used mid-onboarding when the live components aren't built yet (config still
+    incomplete) but Plex is already signed in — the library picker only needs the
+    Plex URL + token, not the rest of the config.
+    """
+    from app.clients.plex import PlexClient
+
+    return PlexClient(url, token)
+
+
 def _static_response(name: str) -> Response:
     """Serve a packaged static file by name from the fixed allowlist."""
     path = _STATIC_FILES.get(name)
     if path is None or not path.is_file():
         return Response(status_code=404)
-    return FileResponse(path, media_type=_MEDIA.get(path.suffix, "text/plain"))
+    # no-cache = always revalidate against the ETag/Last-Modified (cheap 304 when
+    # unchanged) so a UI update is picked up immediately instead of a browser
+    # serving a stale bundle from a heuristic cache.
+    return FileResponse(
+        path,
+        media_type=_MEDIA.get(path.suffix, "text/plain"),
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 def create_webui_router(
@@ -366,6 +385,15 @@ def create_webui_router(
         # yet or the probe fails — the UI just shows nothing to pick.
         comps = getattr(runtime, "components", None)
         plex = getattr(comps, "plex", None) if comps is not None else None
+        if plex is None:
+            # Mid-onboarding the live components aren't built yet (config still
+            # incomplete), but the picker only needs Plex creds — build a throwaway
+            # client from the saved sign-in so libraries are listable right away.
+            saved = store.load() if store and store.exists() else {}
+            url, token = saved.get("plex_url"), saved.get("plex_token")
+            if url and token:
+                with contextlib.suppress(Exception):  # unreachable -> empty list below
+                    plex = _make_plex_client(url, token)
         if plex is None or not hasattr(plex, "list_libraries"):
             return JSONResponse({"libraries": []})
         try:

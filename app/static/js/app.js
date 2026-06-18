@@ -533,7 +533,7 @@ document.addEventListener("alpine:init", () => {
   }));
 
   Alpine.data("wizard", () => ({
-    step: 0, last: 5,
+    step: 0, last: 5, plexConnected: false,
     steps: ["Welcome", "Plex", "Radarr & Sonarr", "Tags", "Notifications", "Done"],
     radarr: { url: "", key: "", ok: null }, sonarr: { url: "", key: "", ok: null },
     tagRows: [{ tag: "", label: "" }],
@@ -541,6 +541,12 @@ document.addEventListener("alpine:init", () => {
               seerrUrl: "", seerrKey: "", seerrOk: null, apprise: "" },
     next() { if (this.step < this.last) this.step++; },
     back() { if (this.step > 0) this.step--; },
+    onPlexConnected() {
+      // The nested plexSignIn dispatches this once, after sign-in completes. Remember
+      // it (so returning via Back can still advance) and auto-advance the first time.
+      this.plexConnected = true;
+      if (this.step === 1) this.next();
+    },
     async saveArr(which) {
       const f = this[which];
       await apiPost("/api/config", { [`${which}_url`]: f.url, [`${which}_api_key`]: f.key });
