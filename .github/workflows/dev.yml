@@ -32,15 +32,16 @@ jobs:
 
       - name: Resolve dev version
         id: ver
-        # Computes two strings with NO git tag / release created:
-        #   version = PEP 440 dev version for the image's internal __version__,
-        #             e.g. 1.9.1.dev4 (next patch + build count; sorts after the
-        #             last release, before the next).
-        #   tag     = pretty, traceable Docker tag, e.g. dev-1.9.0-4-gabc1234
-        #             = dev-<last release>-<build count>-g<short sha>.
+        # One identity per build = <last release> + <build #> + <commit>, with NO
+        # git tag / release created and NO version guessing. Emitted in two forms
+        # because Docker-tag and PEP 440 rules differ but carry the same facts:
+        #   tag     = dev-1.9.0-4-ga8402c8   (pretty Docker tag)
+        #   version = 1.9.0.post4+ga8402c8   (image __version__; PEP 440 post-
+        #             release of the last tag, so it sorts after 1.9.0 / before
+        #             1.9.1 with no guess; the sha is the PEP 440 local segment)
         # BASE = last release; N = commits since it that touch the image (same
-        # paths as this workflow's trigger), so N tracks builds, not docs pushes.
-        # SHA pins the exact source commit (drop "-g${SHA}" if you want it shorter).
+        # paths as this workflow's trigger), so N is the build count, not docs
+        # pushes. SHA pins the exact source commit (deployed image -> commit).
         run: |
           PATHS=(Dockerfile .dockerignore app pyproject.toml .github/workflows/dev.yml)
           if LAST=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null); then
@@ -51,8 +52,7 @@ jobs:
             N=$(git rev-list HEAD --count -- "${PATHS[@]}")
           fi
           SHA=$(git rev-parse --short HEAD)
-          NEXT=$(echo "$BASE" | awk -F. '{printf "%d.%d.%d", $1, $2, $3 + 1}')
-          echo "version=${NEXT}.dev${N}" >> "$GITHUB_OUTPUT"
+          echo "version=${BASE}.post${N}+g${SHA}" >> "$GITHUB_OUTPUT"
           echo "tag=dev-${BASE}-${N}-g${SHA}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v4
