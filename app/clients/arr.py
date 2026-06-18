@@ -56,6 +56,8 @@ class ArrClient:
         raise NotImplementedError
 
     def iter_all_with_tags(self) -> Iterator[tuple[set[str], list[str]]]:
+        if not self._http.base_url:  # not configured yet (e.g. mid-onboarding) -> no-op
+            return
         tags = self.get_tags()
         for item in self.get_all():
             names = [tags[tid] for tid in item.get("tags", []) if tid in tags]

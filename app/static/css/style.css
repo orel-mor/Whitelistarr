@@ -61,6 +61,8 @@ input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); bo
 .btn.primary { background: var(--accent); color: #1a1205; border-color: var(--accent); font-weight: 600; }
 .btn.danger { border-color: var(--danger); color: var(--danger); }
 .btn.small { padding: 5px 10px; font-size: 13px; }
+.btn:disabled { cursor: default; opacity: .5; }
+.btn.is-selected { border-color: var(--accent); background: var(--accent-weak); opacity: 1; }
 .actions-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
 .savebar {
   position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: flex-end;

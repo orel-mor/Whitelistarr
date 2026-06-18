@@ -57,6 +57,14 @@ def test_sonarr_iter_all_with_tags_includes_tmdb_and_tvdb():
 
 
 @respx.mock
+def test_iter_all_with_tags_skips_unconfigured_client():
+    # No base_url (Radarr/Sonarr not set up yet during onboarding) -> yield nothing,
+    # make no HTTP call, rather than blowing up with httpx.UnsupportedProtocol.
+    assert list(RadarrClient("", "k").iter_all_with_tags()) == []
+    assert respx.calls.call_count == 0
+
+
+@respx.mock
 def test_unknown_tag_id_is_skipped():
     respx.get(f"{RADARR}/api/v3/tag").mock(
         return_value=httpx.Response(200, json=[{"id": 1, "label": "kids"}])

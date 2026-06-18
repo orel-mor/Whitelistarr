@@ -90,8 +90,31 @@ class Runtime:
             if getattr(new_settings, f, None) != getattr(self._settings, f, None)
         ]
 
+    def _teardown(self) -> None:
+        if self._components is not None and self._scheduler_started:
+            try:
+                self._components.scheduler.shutdown()
+            except Exception:  # noqa: BLE001 - best-effort teardown
+                log.exception("Error shutting down old scheduler during reload")
+        self._scheduler_started = False
+
     def reload(self, new_settings: Any) -> ReloadResult:
         restart_fields = self._restart_fields(new_settings)
+
+        # Mid-onboarding the user saves config one step at a time, so a save can
+        # land while config is still incomplete (e.g. Plex set but Radarr/Sonarr
+        # not). Mirror boot: stay "UI only" — don't build clients or start the
+        # sweep/reactive jobs until everything required is present.
+        if new_settings.runtime_errors():
+            self._teardown()
+            self._components = None
+            self._settings = new_settings
+            return ReloadResult(
+                ok=True,
+                restart_required=bool(restart_fields),
+                restart_fields=restart_fields or None,
+            )
+
         try:
             new_components = self._builder(new_settings)
         except Exception as exc:  # noqa: BLE001 - any build failure -> keep old

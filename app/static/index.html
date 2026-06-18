@@ -54,9 +54,11 @@
                   <div class="server-pick">
                     <strong x-text="s.name"></strong>
                     <template x-for="conn in s.connections" :key="conn.uri">
-                      <button class="btn small" @click="apply(conn.uri)">
+                      <button class="btn small" @click="apply(conn.uri)"
+                              :disabled="applying" :class="{ 'is-selected': chosen===conn.uri }">
                         <span x-text="conn.local ? 'Local' : 'Remote'"></span>
                         <span class="muted" x-text="' · ' + conn.uri"></span>
+                        <span x-show="applying && chosen===conn.uri"> · Connecting…</span>
                       </button>
                     </template>
                   </div>
@@ -292,9 +294,11 @@
                     <div class="server-pick">
                       <strong x-text="s.name"></strong>
                       <template x-for="conn in s.connections" :key="conn.uri">
-                        <button class="btn small" @click="apply(conn.uri)">
+                        <button class="btn small" @click="apply(conn.uri)"
+                                :disabled="applying" :class="{ 'is-selected': chosen===conn.uri }">
                           <span x-text="conn.local ? 'Local' : 'Remote'"></span>
                           <span class="muted" x-text="' · ' + conn.uri"></span>
+                          <span x-show="applying && chosen===conn.uri"> · Connecting…</span>
                         </button>
                       </template>
                     </div>

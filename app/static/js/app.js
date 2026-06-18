@@ -413,6 +413,7 @@ document.addEventListener("alpine:init", () => {
 
   Alpine.data("plexSignIn", () => ({
     phase: "idle", pinId: null, servers: [], chosen: null, error: "", authUrl: "",
+    applying: false,
     _win: null,
     async start() {
       this.error = ""; this.phase = "pending"; this.authUrl = "";
@@ -440,10 +441,13 @@ document.addEventListener("alpine:init", () => {
       this.phase = "pick";
     },
     async apply(uri) {
+      if (this.applying) return;            // ignore double-clicks while connecting
+      this.error = ""; this.chosen = uri; this.applying = true;
       const r = await apiPost("/api/plex/apply", { pin_id: this.pinId, uri });
       if (r.ok && r.body.ok !== false) {
-        this.phase = "done"; this.chosen = uri; this.$dispatch("plex-connected");
+        this.phase = "done"; this.$dispatch("plex-connected");
       } else {
+        this.applying = false; this.chosen = null;
         this.error = (r.body && r.body.error) || "Apply failed";
       }
     },

@@ -168,8 +168,11 @@ class FakePlexAuth:
     def __init__(self):
         self.applied = None
 
-    def create_pin(self):
-        return {"id": 99, "code": "cc", "authUrl": "https://app.plex.tv/auth#?code=cc"}
+    def create_pin(self, forward_url=None):
+        auth_url = "https://app.plex.tv/auth#?code=cc"
+        if forward_url:
+            auth_url = f"{auth_url}&forwardUrl={forward_url}"
+        return {"id": 99, "code": "cc", "authUrl": auth_url}
 
     def poll_pin(self, pin_id):
         return "tok-secret" if str(pin_id) == "99" else None
@@ -196,6 +199,15 @@ def test_plex_pin_create(tmp_path):
     assert resp.status_code == 200
     assert resp.json()["id"] == 99
     assert "authUrl" in resp.json()
+
+
+def test_plex_pin_success_self_closes(tmp_path):
+    client, _, _ = _plex_client(tmp_path)
+    resp = client.get("/plex/auth/success")
+    assert resp.status_code == 200
+    assert b"window.close()" in resp.content
+    # No auth token is ever reflected into the self-closing page.
+    assert b"tok-secret" not in resp.content
 
 
 def test_plex_poll_authorizes_without_leaking_token(tmp_path):
