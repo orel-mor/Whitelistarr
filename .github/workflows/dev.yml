@@ -1,17 +1,18 @@
-name: Pre-release
+name: Dev (prerelease)
 
-# Optional staging channel. Push to the on-demand `beta` branch -> semantic-release
-# cuts a PRERELEASE (vX.Y.Z-beta.N) and publishes a multi-arch image tagged
-# :beta + :<version>. Create `beta` only when you want to stage a risky change,
-# then merge it into main and delete it. Docker steps run only when the commits
+# Permanent staging channel. Push to `dev` (feature branches merge here) ->
+# semantic-release cuts a PRERELEASE (vX.Y.Z-dev.N) and publishes a multi-arch
+# image tagged :dev + :<version>. Promote to a stable release by opening a PR
+# from `dev` into `main` (merge commit, not squash, so main keeps the individual
+# Conventional Commits for the changelog). Docker steps run only when the commits
 # warrant a release (steps.release.outputs.released).
 
 on:
   push:
-    branches: [beta]
+    branches: [dev]
 
 concurrency:
-  group: prerelease-${{ github.ref }}
+  group: dev-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -27,7 +28,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-python@v6
         with:
@@ -44,7 +45,7 @@ jobs:
         id: release
         uses: python-semantic-release/python-semantic-release@v10.5.3
         with:
-          github_token: ${{ secrets.GH_PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           # Tag + GitHub Release only — no commit-back (version comes from the tag).
           commit: "false"
 
@@ -81,9 +82,9 @@ jobs:
           build-args: |
             SETUPTOOLS_SCM_PRETEND_VERSION_FOR_WHITELISTARR=${{ steps.release.outputs.version }}
           tags: |
-            orelmor/whitelistarr:beta
+            orelmor/whitelistarr:dev
             orelmor/whitelistarr:${{ steps.release.outputs.version }}
-            ghcr.io/orel-mor/whitelistarr:beta
+            ghcr.io/orel-mor/whitelistarr:dev
             ghcr.io/orel-mor/whitelistarr:${{ steps.release.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -93,7 +94,7 @@ jobs:
         if: steps.release.outputs.released == 'true'
         uses: python-semantic-release/publish-action@v10.5.3
         with:
-          github_token: ${{ secrets.GH_PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ steps.release.outputs.tag }}
 
       - name: Label released PR
@@ -110,11 +111,11 @@ jobs:
               try { await github.rest.issues.getLabel({ owner, repo, name }); }
               catch (e) { if (e.status === 404) await github.rest.issues.createLabel({ owner, repo, name, color, description }); }
             }
-            await ensureLabel('beta', 'c5def5', 'Shipped in the beta / prerelease channel (image :beta)');
+            await ensureLabel('dev', 'c5def5', 'Shipped in the dev / prerelease channel (image :dev)');
             const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner, repo, commit_sha: context.sha });
             for (const pr of prs) {
-              await github.rest.issues.addLabels({ owner, repo, issue_number: pr.number, labels: ['beta'] });
-              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body: `🧪 Prereleased in **v${version}** — image \`orelmor/whitelistarr:beta\` + \`:${version}\`.` });
+              await github.rest.issues.addLabels({ owner, repo, issue_number: pr.number, labels: ['dev'] });
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body: `🧪 Prereleased in **v${version}** — image \`orelmor/whitelistarr:dev\` + \`:${version}\`.` });
             }
 
       - name: Notify (Apprise / Discord)
@@ -127,5 +128,5 @@ jobs:
           if [ -z "$APPRISE_URL" ]; then echo "APPRISE_NOTIFY_URL not set — skipping notification."; exit 0; fi
           pip install --quiet apprise
           apprise -t "🧪 Whitelistarr prerelease v$VERSION" \
-                  -b "beta image published: orelmor/whitelistarr:beta and :$VERSION (+ GHCR)." \
+                  -b "dev image published: orelmor/whitelistarr:dev and :$VERSION (+ GHCR)." \
                   "$APPRISE_URL"
