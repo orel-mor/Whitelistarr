@@ -1,4 +1,5 @@
 name: Release
+run-name: Release${{ inputs.dry_run == 'true' && ' (dry run)' || '' }}
 
 # Manual stable release. Trunk-based: features squash-merge into `main` (linear
 # history) and every push builds the `:dev` image (see dev.yml). When you
