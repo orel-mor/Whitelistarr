@@ -2,9 +2,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# gosu lets the entrypoint drop from root to an unprivileged PUID:PGID at start.
+# setpriv (from util-linux, already in the base image) lets the entrypoint drop
+# from root to an unprivileged PUID:PGID at start -- no extra package, and no Go
+# runtime to carry CVEs (unlike gosu). apt upgrade pulls in Debian security
+# fixes for the base OS packages.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends gosu \
+    && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*
 
 # setuptools-scm derives the version from git tags, but the build context has no
@@ -33,6 +36,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').getcode()==200 else 1)"
 
-# Runs as root, drops to PUID:PGID via gosu, then execs the app (CMD).
+# Runs as root, drops to PUID:PGID via setpriv, then execs the app (CMD).
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["whitelistarr"]
