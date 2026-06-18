@@ -57,7 +57,7 @@ jobs:
 
       - name: Docker metadata (tags + OCI labels)
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: |
             orelmor/whitelistarr
