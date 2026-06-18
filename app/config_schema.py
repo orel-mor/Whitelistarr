@@ -6,6 +6,7 @@ field, so saved values pass straight into ``Settings(**values)``. Bootstrap sett
 here — they are not editable from the UI.
 
 Field types: text, secret, int, bool, enum, multi (checkbox set), csv (list),
+libraries (checkbox set of Plex libraries, options fetched live from the server),
 lines (newline-separated list, revealed in the UI), keyvalue (map).
 ``depends_on`` = ``{"key": <other>, "value": <required value>}``.
 
@@ -31,8 +32,8 @@ CONFIG_SCHEMA: list[dict[str, Any]] = [
             {"key": "plex_url", "label": "Plex URL", "type": "text",
              "placeholder": "http://plex:32400"},
             {"key": "plex_token", "label": "Plex Token", "type": "secret"},
-            {"key": "plex_sections", "label": "Sections", "type": "csv",
-             "help": "Movie/Show library names. Empty = all."},
+            {"key": "plex_sections", "label": "Libraries", "type": "libraries",
+             "help": "Which Plex libraries to sync and scan. None checked = all."},
             {"key": "plex_device_name", "label": "Device Name", "type": "text",
              "help": "Shown in Plex → Settings → Devices."},
             {"key": "plex_client_id", "label": "Client ID", "type": "text",

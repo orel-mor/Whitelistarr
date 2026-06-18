@@ -116,6 +116,18 @@ class PlexClient:
             return {"ok": False, "detail": "unreachable"}
         return {"ok": True, "detail": str(name)}
 
+    def list_libraries(self) -> list[dict[str, str]]:
+        """List every labelable Plex library (movie/show) for the picker.
+
+        Ignores the configured section filter — the UI needs the full set of
+        pickable libraries so the user can choose which ones to include.
+        """
+        libs = []
+        for section in self._server.library.sections():
+            if section.type in _SECTION_TYPE:
+                libs.append({"title": section.title, "type": section.type})
+        return libs
+
     def _sections(self) -> list[object]:
         result = []
         for section in self._server.library.sections():

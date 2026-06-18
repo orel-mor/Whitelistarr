@@ -32,7 +32,7 @@
 
         <div class="wizard-panel" x-show="step===1" @plex-connected="next()">
           <h1>Connect Plex</h1>
-          <div x-data="plexSignIn()">
+          <div x-data="plexSignIn({ withLibraries: true })">
             <template x-if="phase==='idle'">
               <button class="btn primary" @click="start()">Sign in with Plex</button>
             </template>
@@ -63,6 +63,23 @@
                     </template>
                   </div>
                 </template>
+              </div>
+            </template>
+            <template x-if="phase==='libraries'">
+              <div>
+                <p class="muted">Which Plex libraries should Whitelistarr sync and scan?
+                  Uncheck any you want left alone (e.g. home videos). All checked = every library.</p>
+                <div class="multi">
+                  <template x-for="lib in libraries" :key="lib.title">
+                    <label><input type="checkbox" x-model="libSel[lib.title]" />
+                      <span x-text="lib.title"></span>
+                      <span class="muted" x-text="' · ' + lib.type"></span></label>
+                  </template>
+                </div>
+                <template x-if="libraries.length===0">
+                  <p class="muted">No movie/TV libraries found on this server.</p>
+                </template>
+                <button class="btn primary" @click="saveLibraries()" style="margin-top:12px">Continue</button>
               </div>
             </template>
             <template x-if="phase==='done'">
@@ -130,6 +147,9 @@
                 when something was watched or has gone stale.</p>
               <div class="field"><label>URL</label><input type="text" x-model="notify.tautulliUrl" placeholder="http://tautulli:8181" /></div>
               <div class="field"><label>API key</label><input type="password" x-model="notify.tautulliKey" /></div>
+              <button class="btn small" @click="testNotifyConn('tautulli')">Test connection</button>
+              <span class="pill" :class="notify.tautulliOk===null ? '' : (notify.tautulliOk ? 'ok' : 'err')"
+                    x-text="notify.tautulliOk===null ? '' : (notify.tautulliOk ? 'connected' : 'failed')"></span>
             </div>
             <div class="group">
               <h2>Seerr <span class="muted">(optional)</span></h2>
@@ -137,6 +157,9 @@
                 it, so alerts can name the requester.</p>
               <div class="field"><label>URL</label><input type="text" x-model="notify.seerrUrl" placeholder="http://seerr:5055" /></div>
               <div class="field"><label>API key</label><input type="password" x-model="notify.seerrKey" /></div>
+              <button class="btn small" @click="testNotifyConn('seerr')">Test connection</button>
+              <span class="pill" :class="notify.seerrOk===null ? '' : (notify.seerrOk ? 'ok' : 'err')"
+                    x-text="notify.seerrOk===null ? '' : (notify.seerrOk ? 'connected' : 'failed')"></span>
             </div>
             <div class="group">
               <h2>Apprise URLs</h2>
@@ -262,7 +285,8 @@
             </table>
           </div>
         </section>
-        <section x-show="$store.app.route==='settings'" x-data="settings()" x-init="load()">
+        <section x-show="$store.app.route==='settings'" x-data="settings()" x-init="load()"
+                 @plex-connected="onPlexConnected()">
           <header class="page-head">
             <h1>Settings</h1>
             <span class="pill warn" x-show="dirty">Unsaved changes</span>
@@ -271,8 +295,14 @@
           <!-- Core -->
           <div class="settings-section">
             <h2 class="section-title">Core</h2>
-            <div class="group" x-data="plexSignIn()">
+            <div class="group" x-data="plexSignIn()" x-init="checkConnected()">
               <h2>Plex sign-in</h2>
+              <template x-if="phase==='connected'">
+                <div class="server-pick">
+                  <p class="pill ok">Connected<span x-show="user"> — <span x-text="user"></span></span></p>
+                  <button class="btn small danger" @click="disconnect()">Disconnect</button>
+                </div>
+              </template>
               <template x-if="phase==='idle'">
                 <button class="btn primary" @click="start()">Sign in with Plex</button>
               </template>
@@ -306,7 +336,10 @@
                 </div>
               </template>
               <template x-if="phase==='done'">
-                <p class="pill ok">Connected — <span x-text="chosen"></span></p>
+                <div class="server-pick">
+                  <p class="pill ok">Connected — <span x-text="chosen"></span></p>
+                  <button class="btn small danger" @click="disconnect()">Disconnect</button>
+                </div>
               </template>
               <p class="errors" x-show="error" x-text="error"></p>
             </div>
@@ -358,25 +391,26 @@
         <section x-show="$store.app.route==='logs'" x-data="logsView()" x-init="start()">
           <header class="page-head">
             <h1>Logs</h1>
-            <div class="logs-controls">
-              <label class="logs-lines">Lines
-                <input class="logs-num" type="number" min="1" max="1000" step="50"
-                       x-model.number="tailN" title="How many recent lines to show" />
-              </label>
-              <select x-model="level">
-                <option value="">All levels</option>
-                <option value="DEBUG">Debug+</option>
-                <option value="INFO">Info+</option>
-                <option value="WARNING">Warning+</option>
-                <option value="ERROR">Error+</option>
-              </select>
-              <label class="toggle"><input type="checkbox" x-model="auto" /> Auto-refresh</label>
-              <input class="logs-num" type="number" min="1" x-model.number="intervalSec"
-                     :disabled="!auto" title="Refresh interval (seconds)" />
-              <span class="muted">s</span>
-              <button class="btn small" @click="tick()">Refresh</button>
-            </div>
           </header>
+          <div class="logs-controls">
+            <label class="logs-lines">Lines
+              <input class="logs-num" type="number" min="1" max="1000" step="50"
+                     x-model.number="tailN" title="How many recent lines to show" />
+            </label>
+            <select x-model="level">
+              <option value="">All levels</option>
+              <option value="DEBUG">Debug+</option>
+              <option value="INFO">Info+</option>
+              <option value="WARNING">Warning+</option>
+              <option value="ERROR">Error+</option>
+            </select>
+            <label class="toggle"><input type="checkbox" x-model="auto" /> Auto-refresh</label>
+            <label class="logs-lines">Every
+              <input class="logs-num logs-num-sm" type="number" min="1" x-model.number="intervalSec"
+                     :disabled="!auto" title="Refresh interval (seconds)" />
+              s</label>
+            <button class="btn small" @click="tick()">Refresh</button>
+          </div>
           <pre class="logs" x-ref="box"><template x-for="l in lines" :key="l.id"><div class="log-line" :class="'lvl-' + l.level.toLowerCase()"><span class="log-time" x-text="logTime(l.time)"></span> <span class="log-level" x-text="l.level"></span> <span class="log-logger" x-text="l.logger"></span> <span x-text="l.message"></span></div></template></pre>
           <p class="muted" x-show="lines.length === 0">No log lines yet.</p>
         </section>

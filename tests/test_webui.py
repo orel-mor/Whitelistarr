@@ -15,11 +15,12 @@ KEY = Fernet.generate_key().decode()
 
 
 class FakeRuntime:
-    def __init__(self, settings, label_sync=None, reload_result=None):
+    def __init__(self, settings, label_sync=None, reload_result=None, components=None):
         self.settings = settings
         self.label_sync = label_sync
         self._reload_result = reload_result or ReloadResult(ok=True)
         self.reloaded_with = None
+        self.components = components
 
     def reload(self, new_settings):
         self.reloaded_with = new_settings
@@ -182,6 +183,9 @@ class FakePlexAuth:
         return [{"name": "Home", "clientIdentifier": "s1",
                  "connections": [{"uri": "http://192.168.1.2:32400", "local": True}]}]
 
+    def account(self, token):
+        return "orel" if token else None
+
 
 def _plex_client(tmp_path):
     store = ConfigStore(str(tmp_path / "config.json"), KEY)
@@ -242,6 +246,79 @@ def test_plex_servers_then_apply_writes_url_and_token(tmp_path):
     saved = store.load()
     assert saved["plex_url"] == "http://192.168.1.2:32400"
     assert saved["plex_token"] == "tok-secret"  # decrypts back via store.load()
+    assert runtime.reloaded_with is not None
+
+
+class FakePlexLibClient:
+    def __init__(self, libs):
+        self._libs = libs
+
+    def list_libraries(self):
+        return self._libs
+
+
+def test_plex_libraries_lists_from_live_component(tmp_path):
+    store = ConfigStore(str(tmp_path / "config.json"), KEY)
+    libs = [{"title": "Movies", "type": "movie"}, {"title": "TV", "type": "show"}]
+    comps = SimpleNamespace(plex=FakePlexLibClient(libs))
+    runtime = FakeRuntime(Settings(), components=comps)
+    app = FastAPI()
+    app.include_router(create_webui_router(runtime=runtime, store=store))
+    client = TestClient(app)
+    resp = client.get("/api/plex/libraries")
+    assert resp.status_code == 200
+    assert resp.json()["libraries"] == libs
+
+
+def test_plex_libraries_empty_when_no_component(tmp_path):
+    client, _, _ = _client(tmp_path)  # FakeRuntime with components=None
+    resp = client.get("/api/plex/libraries")
+    assert resp.status_code == 200
+    assert resp.json()["libraries"] == []
+
+
+def test_plex_account_reports_connected_and_username(tmp_path):
+    store = ConfigStore(str(tmp_path / "config.json"), KEY)
+    settings = Settings(plex_url="http://plex:32400", plex_token="t", plex_client_id="cid")
+    runtime = FakeRuntime(settings)
+    app = FastAPI()
+    app.include_router(
+        create_webui_router(runtime=runtime, store=store, plex_auth=FakePlexAuth())
+    )
+    client = TestClient(app)
+    body = client.get("/api/plex/account").json()
+    assert body["connected"] is True
+    assert body["username"] == "orel"
+
+
+def test_plex_account_not_connected_when_no_token(tmp_path):
+    store = ConfigStore(str(tmp_path / "config.json"), KEY)
+    runtime = FakeRuntime(Settings(plex_url="", plex_token=""))
+    app = FastAPI()
+    app.include_router(
+        create_webui_router(runtime=runtime, store=store, plex_auth=FakePlexAuth())
+    )
+    client = TestClient(app)
+    body = client.get("/api/plex/account").json()
+    assert body["connected"] is False
+    assert body["username"] == ""
+
+
+def test_plex_disconnect_clears_creds_and_reloads(tmp_path):
+    store = ConfigStore(str(tmp_path / "config.json"), KEY)
+    store.save({"plex_url": "http://plex:32400", "plex_token": "secret",
+                "plex_sections": "Movies"})
+    runtime = FakeRuntime(Settings())
+    app = FastAPI()
+    app.include_router(create_webui_router(runtime=runtime, store=store))
+    client = TestClient(app)
+    resp = client.post("/api/plex/disconnect")
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+    saved = store.load()
+    assert not saved.get("plex_url")
+    assert not saved.get("plex_token")
+    assert saved.get("plex_sections") == "Movies"  # library picks survive
     assert runtime.reloaded_with is not None
 
 
