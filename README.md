@@ -210,8 +210,9 @@ disable it. It's a small single-page app (vendored
   recent activity (reactive tag changes, recently-added, sweep, watch scan), live
   per-service connection health, and the actions (run sweep, send test
   notification, run reverse).
-- **Logs**: a live tail of the app log with auto-refresh (on by default, every
-  3s), a level filter, and clear/refresh.
+- **Logs**: a live tail of the app log with an adjustable line count, a level
+  filter, and auto-refresh (on by default, every 3s). The full history is also
+  written to the rolling `LOG_FILE`.
 - **Settings**: every setting grouped, with **Core** shown and **Advanced**
   behind a toggle. Schedules use preset chips (Hourly / Every 6h / Daily / …) or
   a custom cron expression.
@@ -332,6 +333,8 @@ declarative deploy) or in the web UI, where they apply live.
 | `DRY_RUN` | `false` | Log intended changes without applying them |
 | `REVERSE` | `false` | One-shot: remove all managed labels from every item, then exit |
 | `LOG_LEVEL` | `info` | Logging level |
+| `LOG_FILE` | `/data/whitelistarr.log` | Rolling log file path (empty disables it) |
+| `LOG_FILE_LINES` | `10000` | Approx. lines kept in the log file before it rotates |
 | `TZ` | `UTC` | Container timezone |
 | `PUID` / `PGID` | `1000` / `1000` | User/group the container drops to (starts as root, fixes `/data` ownership, then runs unprivileged) |
 

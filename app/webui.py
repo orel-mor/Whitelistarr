@@ -217,10 +217,10 @@ def create_webui_router(
         }
 
     @router.get("/api/logs")
-    async def logs(after: int = 0, level: str | None = None) -> dict:
+    async def logs(after: int = 0, level: str | None = None, tail: int | None = None) -> dict:
         from app.logbuffer import LOG_BUFFER
 
-        records = LOG_BUFFER.records(after=after, level=level)
+        records = LOG_BUFFER.records(after=after, level=level, tail=tail)
         last_id = records[-1]["id"] if records else after
         return {"lines": records, "last_id": last_id}
 

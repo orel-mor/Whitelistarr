@@ -17,13 +17,31 @@ from app.scheduler import Scheduler, build_scheduler
 log = logging.getLogger(__name__)
 
 
-def setup_logging(level: str) -> None:
+def setup_logging(level: str, log_file: str = "", log_file_lines: int = 10000) -> None:
     from app.logbuffer import LOG_BUFFER
+
+    handlers: list[logging.Handler] = [logging.StreamHandler(), LOG_BUFFER.handler()]
+    if log_file:
+        from logging.handlers import RotatingFileHandler
+
+        _ensure_parent_dir(log_file)
+        # Rotate by size to keep the file bounded (current + 1 backup). ~160 bytes
+        # per line is a rough average for our format; the file holds ~log_file_lines
+        # of history without ever growing without bound — and it streams to disk, so
+        # it costs no extra memory (unlike the in-memory buffer the UI reads).
+        handlers.append(
+            RotatingFileHandler(
+                log_file,
+                maxBytes=max(1, log_file_lines) * 160,
+                backupCount=1,
+                encoding="utf-8",
+            )
+        )
 
     logging.basicConfig(
         level=getattr(logging, level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        handlers=[logging.StreamHandler(), LOG_BUFFER.handler()],
+        handlers=handlers,
         force=True,
     )
 
@@ -253,7 +271,7 @@ def run_reverse(settings: Settings) -> dict[str, int]:
 
 def run() -> None:
     settings = load_settings()
-    setup_logging(settings.log_level)
+    setup_logging(settings.log_level, settings.log_file, settings.log_file_lines)
     log.info("Whitelistarr v%s starting", __version__)
 
     if settings.reverse:

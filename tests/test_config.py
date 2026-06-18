@@ -127,6 +127,8 @@ class TestSettings:
         assert s.watched_percent == 85
         assert s.feature_reactive is True
         assert s.reactive_interval_seconds == 60
+        assert s.log_file == "/data/whitelistarr.log"
+        assert s.log_file_lines == 10000
         assert s.notify_on == "labeled,watched,stale"
         assert s.notify_events == ["labeled", "watched", "stale"]
         assert s.feature_ui is True
