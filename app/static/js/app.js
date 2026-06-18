@@ -10,6 +10,23 @@ const el = (tag, props = {}, ...kids) => {
 // key -> {field, get(), wrap, depends_on}. Rebuilt each settings render.
 const SETTINGS_INPUTS = {};
 
+// Per-browser view preferences (which sections are expanded) so the Settings page
+// reopens the way the user last saved it. Pure UI — never sent to the server.
+const UI_PREFS_KEY = "wl.settings.ui";
+function loadUiPref(key, dflt) {
+  try {
+    const o = JSON.parse(localStorage.getItem(UI_PREFS_KEY) || "{}");
+    return key in o ? o[key] : dflt;
+  } catch { return dflt; }
+}
+function saveUiPref(key, value) {
+  try {
+    const o = JSON.parse(localStorage.getItem(UI_PREFS_KEY) || "{}");
+    o[key] = value;
+    localStorage.setItem(UI_PREFS_KEY, JSON.stringify(o));
+  } catch { /* storage disabled — view state just won't persist */ }
+}
+
 // group name -> connection service key (for inline "Test connection").
 const SERVICE_OF_GROUP = {
   Plex: "plex", Radarr: "radarr", Sonarr: "sonarr", Seerr: "seerr", Tautulli: "tautulli",
@@ -96,6 +113,14 @@ function renderField(field, value) {
       const [ki, vi] = r.querySelectorAll("input");
       return ki.value.trim() && vi.value.trim() ? `${ki.value.trim()}:${vi.value.trim()}` : "";
     }).filter(Boolean).join(",");
+  } else if (field.type === "lines") {
+    // Newline-separated list (e.g. Apprise URLs). Stored as a CSV string, but
+    // edited one-per-line so long tokenized URLs stay readable.
+    const ta = el("textarea", { rows: 4,
+      placeholder: field.placeholder || "one per line" });
+    ta.value = String(value || "").split(",").map((s) => s.trim()).filter(Boolean).join("\n");
+    wrap.append(ta);
+    getter = () => ta.value.split("\n").map((s) => s.trim()).filter(Boolean).join(",");
   } else if (field.type === "secret") {
     const isSet = value && value.set;
     const inp = el("input", { type: "password",
@@ -128,11 +153,18 @@ function updateSettingsVisibility() {
   }
 }
 
+// tier -> the $refs container it renders into. "hidden" groups (feature_notify)
+// aren't rendered as cards; their fields are surfaced elsewhere (section toggle).
+const TIER_REF = { core: "core", notify: "notify", advanced: "adv" };
+
 function renderSettingsForm(cmp) {
   for (const k of Object.keys(SETTINGS_INPUTS)) delete SETTINGS_INPUTS[k];
-  const core = cmp.$refs.core, adv = cmp.$refs.adv;
-  core.innerHTML = ""; adv.innerHTML = "";
+  const refs = { core: cmp.$refs.core, notify: cmp.$refs.notify, adv: cmp.$refs.adv };
+  for (const c of Object.values(refs)) c.innerHTML = "";
+
   for (const group of cmp.groups) {
+    const refName = TIER_REF[group.tier];
+    if (!refName) continue; // hidden tier (e.g. the notify toggle field)
     const card = el("section", { className: "group" }, el("h2", {}, group.name));
     for (const field of group.fields) card.append(renderField(field, cmp.values[field.key]));
     const service = SERVICE_OF_GROUP[group.name];
@@ -141,7 +173,26 @@ function renderSettingsForm(cmp) {
       test.addEventListener("click", () => cmp.testConn(service));
       card.append(test);
     }
-    (group.tier === "advanced" ? adv : core).append(card);
+    refs[refName].append(card);
+  }
+
+  // feature_notify is the Notifications section's enable toggle (a checkbox in the
+  // section header bound to cmp.notifyEnabled) rather than a rendered field — but
+  // it still needs to be collected on save, so register a synthetic input for it.
+  const flag = el("div"); // never carries the "hidden" class -> always collected
+  SETTINGS_INPUTS["feature_notify"] = {
+    field: { key: "feature_notify", type: "bool" },
+    get: () => !!cmp.notifyEnabled,
+    wrap: flag,
+    depends_on: null,
+  };
+
+  // Any edit anywhere in the form marks the page dirty (best-effort live hint; the
+  // navigation guard re-checks against the saved baseline regardless).
+  for (const c of Object.values(refs)) {
+    c.addEventListener("input", () => cmp.markDirty());
+    c.addEventListener("change", () => cmp.markDirty());
+    c.addEventListener("click", () => cmp.$nextTick(() => cmp.markDirty()));
   }
   updateSettingsVisibility();
 }
@@ -160,12 +211,47 @@ function collectSettingsPayload() {
 // ---- Alpine components -----------------------------------------------------
 document.addEventListener("alpine:init", () => {
   Alpine.data("settings", () => ({
-    groups: [], values: {}, showAdvanced: false, saving: false,
+    groups: [], values: {}, showAdvanced: false, notifyEnabled: false,
+    saving: false, dirty: false, _baseline: "",
     async load() {
       const [schema, config] = await Promise.all([api("/api/schema"), api("/api/config")]);
       this.groups = schema.body.groups;
       this.values = config.body.values;
-      this.$nextTick(() => renderSettingsForm(this));
+      this.notifyEnabled = !!this.values.feature_notify;
+      // Restore the last-saved view state so the page looks how the user left it.
+      this.showAdvanced = loadUiPref("showAdvanced", false);
+      this.$nextTick(() => {
+        renderSettingsForm(this);
+        this.captureBaseline();
+        this.registerGuard();
+      });
+    },
+    captureBaseline() {
+      this._baseline = JSON.stringify(collectSettingsPayload());
+      this.dirty = false;
+    },
+    isDirty() {
+      try { return JSON.stringify(collectSettingsPayload()) !== this._baseline; }
+      catch { return false; }
+    },
+    markDirty() { this.dirty = this.isDirty(); },
+    onToggle() { this.markDirty(); },
+    registerGuard() {
+      // Block navigation away from a dirty Settings page until the user chooses to
+      // discard (reverting to the saved state) or stay.
+      this.$store.app.setGuard((next) => {
+        if (next === "settings" || !this.isDirty()) return true;
+        if (confirm("You have unsaved changes. Discard them and leave this page?")) {
+          this.revert();
+          return true;
+        }
+        return false;
+      });
+    },
+    async revert() {
+      // Re-fetch the saved config and re-render, so changes are truly reverted
+      // (not just visually reset) and view state returns to the last save.
+      await this.load();
     },
     async save() {
       this.saving = true;
@@ -181,9 +267,33 @@ document.addEventListener("alpine:init", () => {
         this.$store.app.toast("Saved. Restart required for: " + b.restart_fields.join(", "), "warn");
       else this.$store.app.toast("Applied ✓ — no restart needed", "ok");
       if (b.warnings && b.warnings.length) this.$store.app.toast(b.warnings.join("; "), "warn");
+      // Persist view state and reset the dirty baseline to the just-saved values.
+      saveUiPref("showAdvanced", this.showAdvanced);
+      this.captureBaseline();
+    },
+    _fieldVal(key) {
+      const ui = SETTINGS_INPUTS[key];
+      const v = ui && ui.get();
+      return typeof v === "string" ? v.trim() : "";
+    },
+    _secretVal(key) {
+      const ui = SETTINGS_INPUTS[key];
+      const v = ui && ui.get();             // secret getter: null | {value}
+      return v && typeof v === "object" ? String(v.value || "").trim() : "";
     },
     async testConn(service) {
-      const r = await apiPost(`/api/connections/test/${service}`);
+      // Probe the values typed into the form so a connection can be verified before
+      // saving. When the key field is untouched, the server falls back to the saved
+      // credentials for that service.
+      const body = {};
+      const url = this._fieldVal(`${service}_url`);
+      const key = this._secretVal(`${service}_api_key`);
+      // Plex isn't probed from a URL/key pair (it uses the sign-in flow), so only
+      // arr/seerr/tautulli send their typed credentials; the server probes the
+      // saved component otherwise.
+      if (url) body.url = url;
+      if (key) body.api_key = key;
+      const r = await apiPost(`/api/connections/test/${service}`, body);
       const d = r.body || {};
       this.$store.app.toast(`${service}: ${d.ok ? "connected ✓ " : "failed ✗ "}${d.detail || ""}`,
         d.ok ? "ok" : "err");
@@ -303,18 +413,25 @@ document.addEventListener("alpine:init", () => {
 
   Alpine.data("plexSignIn", () => ({
     phase: "idle", pinId: null, servers: [], chosen: null, error: "", authUrl: "",
+    _win: null,
     async start() {
       this.error = ""; this.phase = "pending"; this.authUrl = "";
       const r = await apiPost("/api/plex/pin");
       if (!r.ok) { this.phase = "idle"; this.error = "Could not start sign-in"; return; }
       this.pinId = r.body.id;
-      const win = window.open(r.body.authUrl, "plex", "width=600,height=720");
-      if (!win) this.authUrl = r.body.authUrl;   // popup blocked -> show link
+      this._win = window.open(r.body.authUrl, "plex", "width=600,height=720");
+      if (!this._win) this.authUrl = r.body.authUrl;   // popup blocked -> show link
       this.poll();
+    },
+    closePopup() {
+      // Plex's post-login page doesn't self-close, so close the popup ourselves
+      // once we've seen the PIN authorized.
+      if (this._win && !this._win.closed) { try { this._win.close(); } catch { /* cross-origin */ } }
+      this._win = null;
     },
     async poll() {
       const r = await api(`/api/plex/pin/${this.pinId}`);
-      if (r.body && r.body.authorized) { await this.loadServers(); return; }
+      if (r.body && r.body.authorized) { this.closePopup(); await this.loadServers(); return; }
       setTimeout(() => this.poll(), 2000);
     },
     async loadServers() {
@@ -333,24 +450,50 @@ document.addEventListener("alpine:init", () => {
   }));
 
   Alpine.data("wizard", () => ({
-    step: 0, last: 4, steps: ["Welcome", "Plex", "Radarr & Sonarr", "Tags", "Done"],
+    step: 0, last: 5,
+    steps: ["Welcome", "Plex", "Radarr & Sonarr", "Tags", "Notifications", "Done"],
     radarr: { url: "", key: "", ok: null }, sonarr: { url: "", key: "", ok: null },
-    tagMap: "",
+    tagRows: [{ tag: "", label: "" }],
+    notify: { enabled: false, tautulliUrl: "", tautulliKey: "",
+              seerrUrl: "", seerrKey: "", apprise: "" },
     next() { if (this.step < this.last) this.step++; },
     back() { if (this.step > 0) this.step--; },
     async saveArr(which) {
       const f = this[which];
       await apiPost("/api/config", { [`${which}_url`]: f.url, [`${which}_api_key`]: f.key });
-      const r = await apiPost(`/api/connections/test/${which}`);
+      const r = await apiPost(`/api/connections/test/${which}`,
+        { url: f.url, api_key: f.key });
       f.ok = !!(r.body && r.body.ok);
       this.$store.app.toast(`${which}: ${f.ok ? "connected ✓" : "failed ✗"}`, f.ok ? "ok" : "err");
     },
     canLeaveArr() { return this.radarr.ok || this.sonarr.ok; },
+    addTagRow() { this.tagRows.push({ tag: "", label: "" }); },
+    removeTagRow(i) { this.tagRows.splice(i, 1); if (!this.tagRows.length) this.addTagRow(); },
+    _tagMap() {
+      return this.tagRows
+        .map((r) => [r.tag.trim(), r.label.trim()])
+        .filter(([t, l]) => t && l)
+        .map(([t, l]) => `${t}:${l}`)
+        .join(",");
+    },
     async saveTags() {
-      if (!this.tagMap.trim()) { this.$store.app.toast("Add at least one tag → label", "warn"); return; }
-      await apiPost("/api/config", { tag_label_map: this.tagMap.trim() });
+      const map = this._tagMap();
+      if (!map) { this.$store.app.toast("Add at least one tag → label", "warn"); return; }
+      await apiPost("/api/config", { tag_label_map: map });
       this.next();
     },
+    async saveNotify() {
+      const n = this.notify;
+      if (!n.enabled) { await apiPost("/api/config", { feature_notify: false }); this.next(); return; }
+      await apiPost("/api/config", {
+        feature_notify: true,
+        tautulli_url: n.tautulliUrl.trim(), tautulli_api_key: n.tautulliKey.trim(),
+        seerr_url: n.seerrUrl.trim(), seerr_api_key: n.seerrKey.trim(),
+        apprise_urls: n.apprise.split("\n").map((s) => s.trim()).filter(Boolean).join(","),
+      });
+      this.next();
+    },
+    skipNotify() { this.next(); },
     finish() { location.hash = "#/status"; this.$store.app.route = "status"; },
   }));
 });
