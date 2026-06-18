@@ -81,7 +81,8 @@ input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); bo
   width: 220px; flex: 0 0 220px; background: var(--card); border-right: 1px solid var(--border);
   display: flex; flex-direction: column; padding: 18px 14px; position: sticky; top: 0; height: 100vh;
 }
-.sidebar .brand { font-weight: 700; color: var(--accent); font-size: 17px; padding: 4px 8px 16px; }
+.sidebar .brand { font-weight: 700; color: var(--accent); font-size: 17px; padding: 0; margin-bottom: 16px; }
+.sidebar .brand-logo { width: 100%; height: auto; flex: 1; display: block; }
 .sidebar nav { display: flex; flex-direction: column; gap: 4px; }
 .sidebar nav a {
   color: var(--text); text-decoration: none; padding: 9px 12px; border-radius: 8px; font-size: 14px;
@@ -178,8 +179,8 @@ textarea { resize: vertical; min-height: 84px; font: inherit; line-height: 1.5; 
 /* ---- design pass: polish ------------------------------------------------ */
 /* Signature: a gold tag glyph by the brand, and a gold rail on the active nav
    item — the "label" the whole product is about. */
-.sidebar .brand { display: flex; align-items: center; gap: 9px; }
-.sidebar .brand-logo { width: 20px; height: 20px; flex: none; display: block; }
+.sidebar .brand { display: flex; align-items: center; justify-content: center; }
+.sidebar .brand-logo { width: 100%; height: auto; flex: 1; display: block; }
 .sidebar nav a { position: relative; transition: background .12s ease, color .12s ease; }
 .sidebar nav a.active::before {
   content: ""; position: absolute; left: -14px; top: 6px; bottom: 6px; width: 3px;
