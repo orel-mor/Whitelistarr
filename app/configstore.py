@@ -1,8 +1,9 @@
 """Encrypted JSON config store on the data volume.
 
-Non-secret values are stored as-is; secret fields (per ``config_schema``) are
-Fernet-encrypted with ``PAL_SECRET_KEY``. Values mirror the env-var string forms so
-they pass straight into ``Settings(**values)``.
+Non-secret values are stored as-is; encrypted fields (per ``config_schema`` —
+``secret`` types plus any field flagged ``encrypt``) are Fernet-encrypted with
+``PAL_SECRET_KEY``. Values mirror the env-var string forms so they pass straight
+into ``Settings(**values)``.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
 
-from app.config_schema import secret_keys
+from app.config_schema import encrypted_keys
 
 log = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ class ConfigStore:
             raise ValueError("ConfigStore requires a non-empty secret key (PAL_SECRET_KEY).")
         self._path = path
         self._fernet = Fernet(secret_key.encode())
-        self._secret_keys = set(secret_keys())
+        self._encrypted_keys = set(encrypted_keys())
 
     def exists(self) -> bool:
         return os.path.exists(self._path)
@@ -43,7 +44,7 @@ class ConfigStore:
     def load(self) -> dict[str, Any]:
         """Return the stored config with secret fields decrypted to plaintext."""
         data = self._read_raw()
-        for field in self._secret_keys:
+        for field in self._encrypted_keys:
             token = data.get(field)
             if not token:
                 continue
@@ -62,7 +63,7 @@ class ConfigStore:
         """Merge ``values`` into the store, encrypting secret fields, atomically."""
         merged = self.load()  # decrypted current state, so secrets aren't double-encrypted
         merged.update(values)
-        for field in self._secret_keys:
+        for field in self._encrypted_keys:
             plain = merged.get(field)
             if plain:
                 merged[field] = self._fernet.encrypt(str(plain).encode()).decode()

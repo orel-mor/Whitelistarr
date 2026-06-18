@@ -92,6 +92,19 @@ input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); bo
 .page-head h1 { font-size: 20px; margin: 0; }
 .adv-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .adv-toggle input { width: 16px; height: 16px; accent-color: var(--accent); }
+
+/* ---- settings sections -------------------------------------------------- */
+.settings-section { margin-bottom: 26px; }
+.settings-section > .muted { margin: -4px 0 12px; }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.section-title {
+  font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted);
+  margin: 0 0 12px; font-weight: 600;
+}
+.section-head .section-title { margin-bottom: 6px; }
+.section-head .toggle { font-size: 13px; color: var(--muted); }
+.section-head .toggle input { width: 16px; height: 16px; accent-color: var(--accent); }
+textarea { resize: vertical; min-height: 84px; font: inherit; line-height: 1.5; }
 .groups { display: block; }
 .group {
   background: var(--card); border: 1px solid var(--border); border-radius: 12px;

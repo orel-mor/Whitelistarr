@@ -46,14 +46,17 @@
             </template>
             <template x-if="phase==='pick'">
               <div>
-                <p class="muted">Choose your server:</p>
+                <p class="muted">Choose your server. Plex lists one connection per network —
+                  pick <em>Local</em> if Whitelistarr runs on the same LAN as Plex, else
+                  <em>Remote</em>. The long <code>*.plex.direct</code> hostnames are
+                  normal (Plex's secure direct URLs), even for a single server.</p>
                 <template x-for="s in servers" :key="s.clientIdentifier">
                   <div class="server-pick">
                     <strong x-text="s.name"></strong>
                     <template x-for="conn in s.connections" :key="conn.uri">
                       <button class="btn small" @click="apply(conn.uri)">
-                        <span x-text="conn.uri"></span>
-                        <span class="muted" x-text="conn.local ? ' (local)' : ' (remote)'"></span>
+                        <span x-text="conn.local ? 'Local' : 'Remote'"></span>
+                        <span class="muted" x-text="' · ' + conn.uri"></span>
                       </button>
                     </template>
                   </div>
@@ -97,11 +100,15 @@
 
         <div class="wizard-panel" x-show="step===3">
           <h1>Tag → label map</h1>
-          <p class="muted">Which *arr tag grants which Plex label. Comma-separated
-            <code>tag:label</code> pairs.</p>
-          <div class="field">
-            <input type="text" x-model="tagMap" placeholder="kids:kids-allowed,family:shared" />
-          </div>
+          <p class="muted">Which *arr tag grants which Plex label. One row per pair.</p>
+          <template x-for="(row, i) in tagRows" :key="i">
+            <div class="kv-row">
+              <input type="text" placeholder="tag (e.g. kids)" x-model="row.tag" />
+              <input type="text" placeholder="label (e.g. kids-allowed)" x-model="row.label" />
+              <button type="button" class="btn small" @click="removeTagRow(i)">✕</button>
+            </div>
+          </template>
+          <button type="button" class="btn small" @click="addTagRow()">+ Add</button>
           <div class="wizard-nav">
             <button class="btn" @click="back()">Back</button>
             <button class="btn primary" @click="saveTags()">Next</button>
@@ -109,6 +116,42 @@
         </div>
 
         <div class="wizard-panel" x-show="step===4">
+          <h1>Notifications</h1>
+          <p class="muted">Optional — get Apprise alerts when content is watched or goes stale.
+            You can set this up later in Settings.</p>
+          <label class="toggle"><input type="checkbox" x-model="notify.enabled" /> Enable notifications</label>
+
+          <div x-show="notify.enabled" style="margin-top:16px">
+            <div class="group">
+              <h2>Tautulli</h2>
+              <p class="muted">Tautulli tracks Plex watch history — Whitelistarr reads it to know
+                when something was watched or has gone stale.</p>
+              <div class="field"><label>URL</label><input type="text" x-model="notify.tautulliUrl" placeholder="http://tautulli:8181" /></div>
+              <div class="field"><label>API key</label><input type="password" x-model="notify.tautulliKey" /></div>
+            </div>
+            <div class="group">
+              <h2>Seerr <span class="muted">(optional)</span></h2>
+              <p class="muted">Seerr (Overseerr/Jellyseerr) maps each title to the user who requested
+                it, so alerts can name the requester.</p>
+              <div class="field"><label>URL</label><input type="text" x-model="notify.seerrUrl" placeholder="http://seerr:5055" /></div>
+              <div class="field"><label>API key</label><input type="password" x-model="notify.seerrKey" /></div>
+            </div>
+            <div class="group">
+              <h2>Apprise URLs</h2>
+              <p class="muted">One per line. Each is a notification target — e.g. a Discord webhook
+                or Telegram bot. Stored encrypted.</p>
+              <textarea rows="4" x-model="notify.apprise" placeholder="discord://webhook_id/webhook_token&#10;tgram://bottoken/ChatID"></textarea>
+            </div>
+          </div>
+
+          <div class="wizard-nav">
+            <button class="btn" @click="back()">Back</button>
+            <button class="btn" @click="skipNotify()">Skip</button>
+            <button class="btn primary" @click="saveNotify()" x-text="notify.enabled ? 'Save & continue' : 'Continue'"></button>
+          </div>
+        </div>
+
+        <div class="wizard-panel" x-show="step===5">
           <h1>All set</h1>
           <p class="muted">Your services are connected and Whitelistarr will keep Plex labels in
             sync. Last step (in Plex): restrict your shared user to the label under
@@ -220,60 +263,91 @@
         <section x-show="$store.app.route==='settings'" x-data="settings()" x-init="load()">
           <header class="page-head">
             <h1>Settings</h1>
-            <label class="adv-toggle">
-              <input type="checkbox" x-model="showAdvanced" /> Show advanced
-            </label>
+            <span class="pill warn" x-show="dirty">Unsaved changes</span>
           </header>
-          <div class="group" x-data="plexSignIn()">
-            <h2>Plex sign-in</h2>
-            <template x-if="phase==='idle'">
-              <button class="btn primary" @click="start()">Sign in with Plex</button>
-            </template>
-            <template x-if="phase==='pending'">
-              <div>
-                <p class="muted">Waiting for authorization in the popup…</p>
-                <template x-if="authUrl">
-                  <a :href="authUrl" target="_blank" class="btn small">Popup blocked? Open Plex sign-in</a>
-                </template>
-              </div>
-            </template>
-            <template x-if="phase==='pick'">
-              <div>
-                <p class="muted">Choose your server:</p>
-                <template x-for="s in servers" :key="s.clientIdentifier">
-                  <div class="server-pick">
-                    <strong x-text="s.name"></strong>
-                    <template x-for="conn in s.connections" :key="conn.uri">
-                      <button class="btn small" @click="apply(conn.uri)">
-                        <span x-text="conn.uri"></span>
-                        <span class="muted" x-text="conn.local ? ' (local)' : ' (remote)'"></span>
-                      </button>
-                    </template>
-                  </div>
-                </template>
-              </div>
-            </template>
-            <template x-if="phase==='done'">
-              <p class="pill ok">Connected — <span x-text="chosen"></span></p>
-            </template>
-            <p class="errors" x-show="error" x-text="error"></p>
+
+          <!-- Core -->
+          <div class="settings-section">
+            <h2 class="section-title">Core</h2>
+            <div class="group" x-data="plexSignIn()">
+              <h2>Plex sign-in</h2>
+              <template x-if="phase==='idle'">
+                <button class="btn primary" @click="start()">Sign in with Plex</button>
+              </template>
+              <template x-if="phase==='pending'">
+                <div>
+                  <p class="muted">Waiting for authorization in the popup…</p>
+                  <template x-if="authUrl">
+                    <a :href="authUrl" target="_blank" class="btn small">Popup blocked? Open Plex sign-in</a>
+                  </template>
+                </div>
+              </template>
+              <template x-if="phase==='pick'">
+                <div>
+                  <p class="muted">Choose your server. Plex offers a connection per network —
+                    the <em>local</em> one if Whitelistarr runs on the same LAN as Plex,
+                    otherwise the <em>remote</em> one. The long
+                    <code>*.plex.direct</code> hostnames are normal (Plex's secure direct URLs).</p>
+                  <template x-for="s in servers" :key="s.clientIdentifier">
+                    <div class="server-pick">
+                      <strong x-text="s.name"></strong>
+                      <template x-for="conn in s.connections" :key="conn.uri">
+                        <button class="btn small" @click="apply(conn.uri)">
+                          <span x-text="conn.local ? 'Local' : 'Remote'"></span>
+                          <span class="muted" x-text="' · ' + conn.uri"></span>
+                        </button>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+              </template>
+              <template x-if="phase==='done'">
+                <p class="pill ok">Connected — <span x-text="chosen"></span></p>
+              </template>
+              <p class="errors" x-show="error" x-text="error"></p>
+            </div>
+            <div x-ref="core" class="groups"></div>
           </div>
 
-          <div x-ref="core" class="groups"></div>
-          <div x-ref="adv" class="groups" x-show="showAdvanced"></div>
+          <!-- Notifications -->
+          <div class="settings-section">
+            <header class="section-head">
+              <h2 class="section-title">Notifications</h2>
+              <label class="toggle">
+                <input type="checkbox" x-model="notifyEnabled" @change="onToggle()" /> Enable notifications
+              </label>
+            </header>
+            <p class="muted">Optional. Apprise alerts when content is watched or goes stale.
+              Needs Tautulli (watch history) and, optionally, Seerr (to name the requester).</p>
+            <div x-ref="notify" class="groups" x-show="notifyEnabled"></div>
+          </div>
 
-          <div class="group" x-data="actionsView()">
-            <h2>Actions</h2>
-            <p class="muted">Run these on demand. Results appear in the Activity log on Status.</p>
-            <div class="actions-row">
-              <button class="btn" :disabled="busy" @click="action('test-notification')">Send test notification</button>
-              <button class="btn" :disabled="busy" @click="action('sweep')">Run sweep now</button>
-              <button class="btn danger" :disabled="busy" @click="action('reverse')">Run reverse (remove all labels)</button>
+          <!-- Advanced -->
+          <div class="settings-section">
+            <header class="section-head">
+              <h2 class="section-title">Advanced</h2>
+              <label class="toggle">
+                <input type="checkbox" x-model="showAdvanced" /> Show advanced
+              </label>
+            </header>
+            <div x-ref="adv" class="groups" x-show="showAdvanced"></div>
+          </div>
+
+          <!-- Actions -->
+          <div class="settings-section">
+            <h2 class="section-title">Actions</h2>
+            <div class="group" x-data="actionsView()">
+              <p class="muted">Run these on demand. Results appear in the Activity log on Status.</p>
+              <div class="actions-row">
+                <button class="btn" :disabled="busy" @click="action('test-notification')">Send test notification</button>
+                <button class="btn" :disabled="busy" @click="action('sweep')">Run sweep now</button>
+                <button class="btn danger" :disabled="busy" @click="action('reverse')">Run reverse (remove all labels)</button>
+              </div>
             </div>
           </div>
 
           <div class="savebar">
-            <span class="muted" x-text="saving ? 'Saving…' : ''"></span>
+            <span class="muted" x-text="saving ? 'Saving…' : (dirty ? 'Unsaved changes' : '')"></span>
             <button class="btn primary" @click="save()">Save</button>
           </div>
         </section>

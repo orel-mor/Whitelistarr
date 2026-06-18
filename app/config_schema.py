@@ -6,14 +6,22 @@ field, so saved values pass straight into ``Settings(**values)``. Bootstrap sett
 here — they are not editable from the UI.
 
 Field types: text, secret, int, bool, enum, multi (checkbox set), csv (list),
-keyvalue (map). ``depends_on`` = ``{"key": <other>, "value": <required value>}``.
+lines (newline-separated list, revealed in the UI), keyvalue (map).
+``depends_on`` = ``{"key": <other>, "value": <required value>}``.
+
+``tier`` buckets a group into the Settings page sections: ``core`` (always shown),
+``notify`` (the Notifications section, gated by ``feature_notify``), ``advanced``
+(behind the "Show advanced" toggle).
+
+Encryption vs. masking are separate concerns: ``secret`` fields are both encrypted
+at rest *and* masked from the browser (never returned). A field may instead set
+``"encrypt": True`` to be encrypted at rest but still revealed in the UI — used for
+Apprise URLs, which the user needs to see and edit but which contain tokens.
 """
 
 from __future__ import annotations
 
 from typing import Any
-
-_NOTIFY_DEP = {"key": "feature_notify", "value": True}
 
 CONFIG_SCHEMA: list[dict[str, Any]] = [
     {
@@ -50,15 +58,6 @@ CONFIG_SCHEMA: list[dict[str, Any]] = [
         ],
     },
     {
-        "name": "Seerr",
-        "tier": "advanced",
-        "fields": [
-            {"key": "seerr_url", "label": "Seerr URL", "type": "text",
-             "placeholder": "http://seerr:5055"},
-            {"key": "seerr_api_key", "label": "Seerr API Key", "type": "secret"},
-        ],
-    },
-    {
         "name": "Labels",
         "tier": "core",
         "fields": [
@@ -69,7 +68,7 @@ CONFIG_SCHEMA: list[dict[str, Any]] = [
         ],
     },
     {
-        "name": "Features",
+        "name": "Scheduling",
         "tier": "core",
         "fields": [
             {"key": "feature_webhook", "label": "Webhook receiver", "type": "bool"},
@@ -81,36 +80,58 @@ CONFIG_SCHEMA: list[dict[str, Any]] = [
             {"key": "feature_sweep", "label": "Periodic sweep", "type": "bool"},
             {"key": "sweep_cron", "label": "Sweep schedule", "type": "cron",
              "placeholder": "0 * * * *", "help": "When the reconcile sweep runs."},
-            {"key": "feature_notify", "label": "Watched/stale notifications", "type": "bool"},
-            {"key": "watch_scan_cron", "label": "Watch scan schedule", "type": "cron",
-             "placeholder": "0 3 * * *", "help": "When the watch-history scan runs.",
-             "depends_on": _NOTIFY_DEP},
         ],
     },
+    # --- Notifications section (gated by feature_notify) ---------------------
+    # feature_notify is the section's enable toggle: the Settings UI renders it as
+    # the Notifications header checkbox, not as a field inside a group.
     {
         "name": "Notifications",
-        "tier": "advanced",
+        "tier": "notify",
         "fields": [
-            {"key": "apprise_urls", "label": "Apprise URLs", "type": "secret",
-             "help": "Comma-separated. Contains tokens, stored encrypted."},
+            {"key": "apprise_urls", "label": "Apprise URLs", "type": "lines",
+             "encrypt": True,
+             "help": "One Apprise URL per line — e.g. a Discord webhook or a Telegram "
+                     "bot. These are how watched/stale alerts reach you. Stored "
+                     "encrypted on disk."},
             {"key": "notify_on", "label": "Notify on", "type": "multi",
              "options": ["labeled", "watched", "stale"]},
-            {"key": "watched_percent", "label": "Watched %", "type": "int",
-             "depends_on": _NOTIFY_DEP},
-            {"key": "stale_after_days", "label": "Stale after (days)", "type": "int",
-             "depends_on": _NOTIFY_DEP},
-            {"key": "unwatched_after_days", "label": "Unwatched window (days)", "type": "int",
-             "depends_on": _NOTIFY_DEP},
+            {"key": "watch_scan_cron", "label": "Watch scan schedule", "type": "cron",
+             "placeholder": "0 3 * * *", "help": "When the watch-history scan runs."},
+            {"key": "watched_percent", "label": "Watched %", "type": "int"},
+            {"key": "stale_after_days", "label": "Stale after (days)", "type": "int"},
+            {"key": "unwatched_after_days", "label": "Unwatched window (days)", "type": "int"},
         ],
     },
     {
         "name": "Tautulli",
-        "tier": "advanced",
+        "tier": "notify",
         "fields": [
             {"key": "tautulli_url", "label": "Tautulli URL", "type": "text",
-             "placeholder": "http://tautulli:8181", "depends_on": _NOTIFY_DEP},
-            {"key": "tautulli_api_key", "label": "Tautulli API Key", "type": "secret",
-             "depends_on": _NOTIFY_DEP},
+             "placeholder": "http://tautulli:8181",
+             "help": "Tautulli tracks Plex watch history — Whitelistarr reads it to "
+                     "decide when something is watched or has gone stale."},
+            {"key": "tautulli_api_key", "label": "Tautulli API Key", "type": "secret"},
+        ],
+    },
+    {
+        "name": "Seerr",
+        "tier": "notify",
+        "fields": [
+            {"key": "seerr_url", "label": "Seerr URL", "type": "text",
+             "placeholder": "http://seerr:5055",
+             "help": "Seerr (Overseerr/Jellyseerr) maps each title to the user who "
+                     "requested it, so stale/watched alerts can name the requester."},
+            {"key": "seerr_api_key", "label": "Seerr API Key", "type": "secret"},
+        ],
+    },
+    {
+        # feature_notify lives here so it's a known, saveable field; the UI surfaces
+        # it as the Notifications section toggle rather than a standalone group.
+        "name": "_notify_toggle",
+        "tier": "hidden",
+        "fields": [
+            {"key": "feature_notify", "label": "Enable notifications", "type": "bool"},
         ],
     },
     {
@@ -146,4 +167,14 @@ def field_keys() -> list[str]:
 
 
 def secret_keys() -> list[str]:
+    """Fields masked from the browser (never returned). Always encrypted too."""
     return [f["key"] for f in fields_by_key().values() if f["type"] == "secret"]
+
+
+def encrypted_keys() -> list[str]:
+    """Fields encrypted at rest: every secret, plus any with ``encrypt: True``."""
+    return [
+        f["key"]
+        for f in fields_by_key().values()
+        if f["type"] == "secret" or f.get("encrypt")
+    ]

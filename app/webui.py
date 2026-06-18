@@ -7,6 +7,7 @@ is easy to test and the app can serve the UI even when nothing is configured yet
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 from pathlib import Path
@@ -54,6 +55,35 @@ _STATIC_NAMES = (
     "js/app.js",
 )
 _STATIC_FILES = {name: STATIC_DIR / name for name in _STATIC_NAMES}
+
+
+def _make_test_client(service: str, url: str, key: str) -> tuple[Any, bool]:
+    """Build a throwaway client from posted credentials for a one-off probe.
+
+    Returns ``(client, is_ephemeral)``. Plex isn't built here (it connects via the
+    sign-in flow, not a URL/key pair). Both a URL and key are required; otherwise
+    ``(None, False)`` so the caller falls back to the live, saved component (which
+    still holds the previously saved credentials).
+    """
+    if not url or not key:
+        return None, False
+    if service == "radarr":
+        from app.clients.radarr import RadarrClient
+
+        return RadarrClient(url, key), True
+    if service == "sonarr":
+        from app.clients.sonarr import SonarrClient
+
+        return SonarrClient(url, key), True
+    if service == "seerr":
+        from app.clients.seerr import SeerrClient
+
+        return SeerrClient(url, key), True
+    if service == "tautulli":
+        from app.clients.tautulli import TautulliClient
+
+        return TautulliClient(url, key), True
+    return None, False
 
 
 def _static_response(name: str) -> Response:
@@ -225,12 +255,31 @@ def create_webui_router(
         return {"lines": records, "last_id": last_id}
 
     @router.post("/api/connections/test/{service}")
-    async def connection_test(service: str) -> Response:
-        comps = runtime.components
-        client = getattr(comps, service, None) if comps is not None else None
-        if service not in _PROBE_SERVICES or client is None:
+    async def connection_test(service: str, request: Request) -> Response:
+        if service not in _PROBE_SERVICES:
+            return JSONResponse({"error": "Unknown service"}, status_code=409)
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001 - empty/invalid body => probe saved config
+            body = {}
+
+        # Prefer the credentials typed into the form so the user can test before
+        # saving; fall back to the live (saved) component when none are posted.
+        url = (body.get("url") or "").strip()
+        key = (body.get("api_key") or body.get("token") or "").strip()
+        client, ephemeral = _make_test_client(service, url, key)
+        if client is None:
+            comps = getattr(runtime, "components", None)
+            client = getattr(comps, service, None) if comps is not None else None
+        if client is None:
             return JSONResponse({"error": "Service not configured"}, status_code=409)
-        _, result = await _probe(service, client)
+
+        try:
+            _, result = await _probe(service, client)
+        finally:
+            if ephemeral:
+                with contextlib.suppress(Exception):
+                    await run_in_threadpool(client.close)
         return JSONResponse(result)
 
     # pin_id -> (auth token, stored_at). Held server-side only (never sent to the

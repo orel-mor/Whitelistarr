@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import httpx
+import respx
 from cryptography.fernet import Fernet
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -51,6 +53,20 @@ def test_config_masks_secrets(tmp_path):
     assert values["plex_url"] == "http://plex:32400"
     assert values["plex_token"] == {"set": True}  # never plaintext
     assert "errors" in resp.json()
+
+
+def test_apprise_revealed_in_config_but_encrypted_on_disk(tmp_path):
+    client, store, _ = _client(tmp_path)
+    store.save({"apprise_urls": "discord://tok@id,tgram://bot/chat"})
+    # On disk it is encrypted (not the plaintext URLs)...
+    import json
+
+    with open(store._path, encoding="utf-8") as fh:
+        raw = json.load(fh)
+    assert raw["apprise_urls"] != "discord://tok@id,tgram://bot/chat"
+    # ...but the UI gets the real value back (it's not a masked secret).
+    values = client.get("/api/config").json()["values"]
+    assert values["apprise_urls"] == "discord://tok@id,tgram://bot/chat"
 
 
 def test_save_persists_and_calls_reload(tmp_path):
@@ -115,6 +131,30 @@ def test_action_sweep_uses_runtime_label_sync(tmp_path):
 def test_action_sweep_409_when_unconfigured(tmp_path):
     client, _, _ = _client(tmp_path, label_sync=None)
     assert client.post("/api/actions/sweep").status_code == 409
+
+
+@respx.mock
+def test_connection_test_uses_posted_credentials_without_saving(tmp_path):
+    # The Test connection button must probe the values typed into the form, even
+    # before they're saved (and even when the live component isn't built yet).
+    respx.get("http://seerr:5055/api/v1/status").mock(
+        return_value=httpx.Response(200, json={"version": "1.33.2"})
+    )
+    client, store, _ = _client(tmp_path)
+    resp = client.post(
+        "/api/connections/test/seerr",
+        json={"url": "http://seerr:5055", "api_key": "k"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+    assert "1.33.2" in resp.json()["detail"]
+    # Probing must not persist anything.
+    assert not store.exists() or "seerr_url" not in store.load()
+
+
+def test_connection_test_unknown_service_409(tmp_path):
+    client, _, _ = _client(tmp_path)
+    assert client.post("/api/connections/test/bogus", json={}).status_code == 409
 
 
 def test_action_reverse_requires_confirm(tmp_path):
