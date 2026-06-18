@@ -24,6 +24,7 @@ def _settings(**over):
         plex_url="http://plex:32400", webhook_host="0.0.0.0", webhook_port=8000,
         pal_secret_key="k", config_path="/data/config.json",
         state_db_path="/data/state.db", feature_ui=True,
+        runtime_errors=lambda: [],
     )
     base.update(over)
     return SimpleNamespace(**base)
@@ -49,6 +50,20 @@ def test_reload_swaps_components_on_success():
     assert rt.label_sync == "new"
     assert old.scheduler.shutdown_called is True   # old torn down
     assert new.scheduler.started is True            # new started
+
+
+def test_reload_does_not_start_scheduler_when_unconfigured():
+    # Mid-onboarding (e.g. Plex saved but Radarr/Sonarr not yet): don't build or
+    # start jobs until config is complete. Mirror boot's "UI only" behaviour.
+    old = _components("old")
+    new = _components("new")
+    rt = Runtime(_settings(), old, builder=lambda s: new)
+    rt.start()
+    result = rt.reload(_settings(runtime_errors=lambda: ["RADARR_URL is required."]))
+    assert result.ok is True
+    assert new.scheduler.started is False           # jobs not started yet
+    assert old.scheduler.shutdown_called is True    # old torn down
+    assert rt.components is None                     # UI-only until configured
 
 
 def test_reload_rolls_back_on_build_failure():
