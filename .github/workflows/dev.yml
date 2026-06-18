@@ -38,7 +38,7 @@ jobs:
         # after 1.2.0 and before 1.2.1). N is commit distance, so it's monotonic
         # and reproducible (may skip numbers for docs-only pushes that build no image).
         run: |
-          if LAST=$(git describe --tags --abbrev=0 2>/dev/null); then
+          if LAST=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null); then
             BASE=${LAST#v}
             N=$(git rev-list "${LAST}..HEAD" --count)
           else
