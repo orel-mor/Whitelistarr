@@ -7,6 +7,7 @@ browser.
 
 from __future__ import annotations
 
+import platform
 from typing import Any
 from urllib.parse import urlencode
 
@@ -22,10 +23,17 @@ class PlexAuth:
         self._product = product
 
     def _headers(self) -> dict[str, str]:
+        # plex.tv ties the PIN's auth token to the full device context, so the
+        # same headers must be sent on create *and* poll or the token is never
+        # released. Keep this set in sync across both calls.
         return {
             "Accept": "application/json",
             "X-Plex-Product": self._product,
             "X-Plex-Client-Identifier": self._client_id,
+            "X-Plex-Version": "1.0",
+            "X-Plex-Platform": platform.system(),
+            "X-Plex-Device": platform.machine(),
+            "X-Plex-Device-Name": self._product,
         }
 
     def create_pin(self, forward_url: str | None = None) -> dict[str, Any]:
