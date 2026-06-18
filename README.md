@@ -2,8 +2,6 @@
   <img src="assets/logo.svg" alt="Whitelistarr" width="360">
 </p>
 
-<h1 align="center">Whitelistarr</h1>
-
 [![Release](https://github.com/orel-mor/Whitelistarr/actions/workflows/release.yml/badge.svg)](https://github.com/orel-mor/Whitelistarr/actions/workflows/release.yml)
 [![CodeQL](https://github.com/orel-mor/Whitelistarr/actions/workflows/codeql.yml/badge.svg)](https://github.com/orel-mor/Whitelistarr/actions/workflows/codeql.yml)
 [![Latest release](https://img.shields.io/github/v/release/orel-mor/Whitelistarr?include_prereleases&sort=semver)](https://github.com/orel-mor/Whitelistarr/releases)
@@ -16,17 +14,14 @@ share can be whitelisted automatically — no second library, no labeling titles
 hand. It can also send **Apprise notifications** for watch milestones and stale,
 unwatched content.
 
-It is a lightweight, self-hosted service that does one thing well: keep Plex
-labels in sync with your \*arr tags, in real time. Configure it declaratively
-through environment variables, or interactively through the built-in web UI —
-including a guided first-run setup and **Sign in with Plex**.
+A lightweight, self-hosted service that does one thing well, in real time.
+Configure it declaratively through environment variables or interactively through
+the built-in web UI (with a guided first-run setup and **Sign in with Plex**).
 
-Whitelistarr is a focused reimplementation of
+A focused reimplementation of
 [plex-requester-collections](https://github.com/manybothans/plex-requester-collections).
-
-Images are published to **`orelmor/whitelistarr`** (Docker Hub) and
-**`ghcr.io/orel-mor/whitelistarr`** (GHCR), multi-arch for `linux/amd64` and
-`linux/arm64`.
+Images publish multi-arch (`amd64`/`arm64`) to **`orelmor/whitelistarr`** (Docker
+Hub) and **`ghcr.io/orel-mor/whitelistarr`** (GHCR).
 
 ## Features
 
@@ -80,13 +75,10 @@ Seerr request ──► Radarr / Sonarr (requester tag)
 
 ## Getting started
 
-You don't need to clone the repository — the image is prebuilt. Create a
-`docker-compose.yml` and run `docker compose up -d`.
-
-The example below is a complete declarative setup. If you prefer, set only
-`PAL_SECRET_KEY`, start the container, and configure everything else in the web UI
-(served by default) — including **Sign in with Plex**, which fills in your Plex URL
-and token for you.
+The image is prebuilt — no need to clone the repo. The only env var you must set
+is `PAL_SECRET_KEY` (encrypts the saved config; generate one — see [Web UI](#web-ui)).
+Everything else is configured in the web UI, served at `http://<host>:8000/`,
+including **Sign in with Plex**, which fills in your Plex URL and token for you.
 
 ```yaml
 services:
@@ -95,95 +87,57 @@ services:
     container_name: whitelistarr
     restart: unless-stopped
     ports:
-      - "8000:8000" # web UI + webhook receiver + /health
+      - "8000:8000"
     volumes:
-      - ./data:/data # notification-dedup database + encrypted UI config
+      - ./data:/data
     environment:
-      # === Required ===
-      # Encrypts the saved UI config at rest. Generate once (see "Web UI" below).
       PAL_SECRET_KEY: "paste-a-fernet-key-here"
+```
 
-      # === Connections ===
-      # Or leave these blank and set them in the UI; "Sign in with Plex" fills Plex.
-      PLEX_URL: "http://plex:32400" # Plex Pass required for label-based share filtering
+```bash
+docker compose up -d
+curl http://localhost:8000/health   # -> {"status":"ok"}
+```
+
+### Configuring via env instead of the UI
+
+Prefer a fully declarative deploy? Add any of these to skip onboarding entirely —
+the same settings the UI would write. See the
+[configuration reference](#configuration-reference) for the full list.
+
+```yaml
+    environment:
+      PAL_SECRET_KEY: "paste-a-fernet-key-here"
+      PLEX_URL: "http://plex:32400"
       PLEX_TOKEN: "your-plex-token"
       RADARR_URL: "http://radarr:7878"
       RADARR_API_KEY: "your-radarr-key"
       SONARR_URL: "http://sonarr:8989"
       SONARR_API_KEY: "your-sonarr-key"
-
-      # === Labels (the core mapping) ===
-      # <arr-tag>:<plex-label>,... — unmapped tags are ignored.
-      TAG_LABEL_MAP: "kids:kids-allowed,family:shared"
-
-      # === Schedules (optional — defaults shown) ===
-      # The reactive poll (new media + tag changes, ~60s) is on by default; the
-      # sweep is the slower full-reconcile safety net.
-      SWEEP_CRON: "0 * * * *" # reconcile sweep — hourly
-      WATCH_SCAN_CRON: "0 3 * * *" # watch/stale scan — daily at 03:00
-
-      # === Notifications (optional — remove this block to disable) ===
-      FEATURE_NOTIFY: "true"
-      APPRISE_URLS: "discord://webhook_id/webhook_token" # comma-separated
-      SEERR_URL: "http://seerr:5055"
-      SEERR_API_KEY: "your-seerr-key"
-      TAUTULLI_URL: "http://tautulli:8181"
-      TAUTULLI_API_KEY: "your-tautulli-key"
-
-      # === Container ===
-      TZ: "UTC"
-      PUID: "1000"
-      PGID: "1000"
+      TAG_LABEL_MAP: "kids:kids-allowed,family:shared" # <arr-tag>:<plex-label>
 ```
 
-```bash
-docker compose pull
-docker compose up -d
-docker compose logs -f
-curl http://localhost:8000/health   # -> {"status":"ok"}
-```
-
-For a cautious first run, add `DRY_RUN: "true"` to the environment and watch the
-logs: you'll see the labels it *would* add or remove and the notifications it
-*would* send, without touching Plex. Remove it once the output looks correct.
-
-If Seerr runs on the same Docker network, drop the `ports:` mapping and point
-Seerr at `http://whitelistarr:8000` instead of the host.
+For a cautious first run, add `DRY_RUN: "true"`: the logs show every label and
+notification it *would* apply, without touching Plex. If Seerr runs on the same
+Docker network, drop the `ports:` mapping and point it at `http://whitelistarr:8000`.
 
 ## Triggering immediate labeling
 
-Nothing to configure by default: the **reactive poll** (`FEATURE_REACTIVE=true`)
-reacts to both new media and tag changes within `REACTIVE_INTERVAL_SECONDS`, and
-the periodic sweep is the safety net. The webhook options below are optional —
-use them only if you want push-instant (sub-second) labeling.
+By default the **reactive poll** (`FEATURE_REACTIVE=true`) handles everything: every
+`REACTIVE_INTERVAL_SECONDS` (60s) it labels Plex recently-added items and diffs the
+Radarr/Sonarr tag index to react to tag edits — including **manually added** content,
+not just Seerr requests. No webhook, no Plex Pass. The periodic sweep is the safety
+net. This is the recommended path.
 
-### Option A — reactive poll (default; no webhook, no Plex Pass)
+The webhooks below are optional — only for push-instant (sub-second) labeling.
+Append `?token=YOUR_SECRET` to either URL if you set `WEBHOOK_SECRET`.
 
-On by default. Every 60 seconds Whitelistarr labels Plex recently-added items and
-diffs the Radarr/Sonarr tag index to react to tag edits — including **manually
-added** content, not just Seerr requests. Lower `REACTIVE_INTERVAL_SECONDS` for a
-snappier reaction. This is the recommended path; the webhooks below are only
-needed for sub-second latency.
-
-### Option B — Plex webhook (push; requires Plex Pass)
-
-Plex fires `library.new` the instant it adds an item. Requires Plex Pass (server
-owner) and manual setup. In **Plex → Settings → Webhooks → Add Webhook**, set the
-URL to `http://whitelistarr:8000/webhook/plex` (or
-`http://<docker-host>:8000/webhook/plex`). If you set `WEBHOOK_SECRET`, append
-`?token=YOUR_SECRET`.
-
-### Option C — Seerr webhook
-
-In **Seerr → Settings → Notifications → Webhook**:
-
-- **Webhook URL:** `http://whitelistarr:8000/webhook/seerr` (or
-  `http://<docker-host>:8000/webhook/seerr`). With `WEBHOOK_SECRET`, append
-  `?token=YOUR_SECRET`.
-- **Notification types:** enable **Media Available** (others are ignored).
-- Keep the default JSON payload — the app reads `media.media_type`, `media.tmdbId`
-  and `media.tvdbId`.
-- Click **Test** (test pings are accepted and ignored), then **Save**.
+- **Plex** (requires Plex Pass): in **Plex → Settings → Webhooks → Add Webhook**,
+  set the URL to `http://whitelistarr:8000/webhook/plex`. Plex fires `library.new`
+  the instant it adds an item.
+- **Seerr**: in **Seerr → Settings → Notifications → Webhook**, set the URL to
+  `http://whitelistarr:8000/webhook/seerr`, enable **Media Available** (others are
+  ignored), keep the default JSON payload, then **Save**.
 
 ## Restricting a shared user to the label
 
@@ -199,48 +153,32 @@ This is the step that actually gates access (requires Plex Pass on your account)
 ## Web UI
 
 The web UI is **on by default** — set a `PAL_SECRET_KEY` and it's served at
-`http://<host>:8000/` (the same port as the webhooks). Set `FEATURE_UI=false` to
-disable it. It's a small single-page app (vendored
-[Alpine.js](https://alpinejs.dev/) — no build step) with these screens:
+`http://<host>:8000/` (same port as the webhooks). Set `FEATURE_UI=false` to disable
+it. It's a small single-page app (vendored [Alpine.js](https://alpinejs.dev/), no
+build step) with four screens: a first-run **Setup wizard** (Sign in with Plex,
+connect Radarr/Sonarr, set the tag → label map); a **Status** dashboard (job
+schedule, recent activity, live connection health, and actions); a live **Logs**
+tail; and a grouped **Settings** editor.
 
-- **Setup wizard** (first run, when nothing is configured yet): sign in with
-  Plex, connect Radarr/Sonarr with live connection tests, set your tag → label
-  map, done. It hands off to the Status screen.
-- **Status**: job schedule with next-run times, the read-only tag → label map,
-  recent activity (reactive tag changes, recently-added, sweep, watch scan), live
-  per-service connection health, and the actions (run sweep, send test
-  notification, run reverse).
-- **Logs**: a live tail of the app log with an adjustable line count, a level
-  filter, and auto-refresh (on by default, every 3s). The full history is also
-  written to the rolling `LOG_FILE`.
-- **Settings**: every setting grouped, with **Core** shown and **Advanced**
-  behind a toggle. Schedules use preset chips (Hourly / Every 6h / Daily / …) or
-  a custom cron expression.
+**Generate a `PAL_SECRET_KEY`** (a Fernet key) once:
 
-Details:
+```bash
+openssl rand -base64 32 | tr '+/' '-_'
+# or: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
 
-- **Sign in with Plex.** Instead of pasting a token, use the sign-in flow: it
-  opens plex.tv, you authorize, then pick your server from the detected list —
-  Whitelistarr fills in both the Plex URL and token for you.
-- **First run** seeds the config from your environment variables. After that the
-  **saved config is the source of truth** and the environment becomes a fallback.
-- **Secrets** (tokens and API keys) are stored **encrypted** with
-  `PAL_SECRET_KEY`. Generate one once:
-  ```bash
-  openssl rand -base64 32 | tr '+/' '-_'
-  # or: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-  ```
-- **Changes apply live** — saving rebuilds the running clients and scheduler in
-  place, no container restart. The exception is the bootstrap settings
+- **Sign in with Plex.** Instead of pasting a token, the sign-in flow opens plex.tv,
+  you authorize and pick your server, and Whitelistarr fills in the URL and token.
+- **First run** seeds config from the environment; after that the **saved config is
+  the source of truth** and the environment is a fallback.
+- **Secrets** (tokens, API keys) are encrypted at rest with `PAL_SECRET_KEY` and
+  never returned to the browser in plaintext.
+- **Changes apply live** (no restart), except the bootstrap settings
   (`PAL_SECRET_KEY`, `CONFIG_PATH`, `STATE_DB_PATH`, `FEATURE_UI`, `WEBHOOK_HOST`,
-  `WEBHOOK_PORT`); changing one shows a "restart to apply" banner for that field.
-  If a save can't connect (e.g. a bad Plex token), the previous config keeps
-  running and the UI shows the error.
-- **No built-in authentication.** The UI can edit secrets, so keep it behind a
-  reverse proxy or on a trusted network. Secrets are never returned to the browser
-  in plaintext, and the config file is encrypted at rest. Mutating `/api` requests
-  from a foreign origin are rejected (a basic cross-origin guard), but that is not
-  a substitute for putting auth in front. Set `FEATURE_UI=false` to disable the UI.
+  `WEBHOOK_PORT`), which show a "restart to apply" banner.
+- **No built-in auth.** The UI can edit secrets — keep it behind a reverse proxy or
+  on a trusted network. A basic cross-origin guard rejects foreign-origin `/api`
+  writes, but that's not a substitute for real auth.
 
 If `FEATURE_UI=true` but `PAL_SECRET_KEY` is unset, the UI is disabled and the app
 runs from environment variables.
@@ -359,23 +297,17 @@ conventions, and release process.
 
 ## Releases and CI
 
-The project is **trunk-based**: `main` is the single permanent branch, and
-releases are automated with
-[python-semantic-release](https://python-semantic-release.readthedocs.io/), driven
-by [Conventional Commits](https://www.conventionalcommits.org/):
+The project is **trunk-based**: `main` is the single permanent branch, with releases
+automated by
+[python-semantic-release](https://python-semantic-release.readthedocs.io/) from
+[Conventional Commits](https://www.conventionalcommits.org/). A squash-merge to
+`main` cuts a stable release (GitHub Release, changelog, multi-arch `:latest` and
+`:X.Y.Z` images); the commit type drives the bump (`feat:` → minor, `fix:` → patch,
+`feat!:`/`BREAKING CHANGE:` → major; `docs:`/`chore:`/`test:` → none). Push an
+on-demand `beta` branch to stage prereleases (`:beta`) first.
 
-- A squash-merge to **`main`** cuts a stable release with a GitHub Release and
-  changelog, and publishes a multi-arch image tagged `:latest` and `:X.Y.Z`.
-- Commit type drives the version bump: `feat:` → minor, `fix:` → patch, `feat!:`
-  or `BREAKING CHANGE:` → major. `docs:` / `chore:` / `test:` produce no release.
-- To stage a risky change first, push an on-demand **`beta`** branch: it cuts
-  prereleases (`vX.Y.Z-beta.N`) and publishes `:beta`. Merge it into `main` and
-  delete it when done.
-- Image builds run only when the commits warrant a release.
-
-Pull requests additionally run tests, lint, CodeQL analysis, a dependency audit,
-and a Trivy image scan. See [`.github/workflows/`](.github/workflows/) for the
-full pipeline.
+Pull requests also run tests, lint, CodeQL, a dependency audit, and a Trivy image
+scan. See [`.github/workflows/`](.github/workflows/) for the full pipeline.
 
 ## Limitations
 
