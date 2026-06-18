@@ -1,6 +1,6 @@
 ## What & why
 
-<!-- Trunk-based: target `main`. Merging builds the `:dev` edge image; stable
+<!-- Trunk-based: target `main`. Merging builds the `:dev` image; stable
      releases are cut on demand via the Release workflow (Actions tab). -->
 
 <!-- Briefly: what does this change and why? -->

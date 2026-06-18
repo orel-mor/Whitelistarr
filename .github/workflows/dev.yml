@@ -1,10 +1,10 @@
-name: Edge image
+name: Dev
 
-# Trunk-based dev channel. Every push to `main` builds and publishes the bleeding-
-# edge image tagged :dev (+ :dev-<short-sha>) so you can test the latest code
-# before cutting a stable release (see release.yml). No version bump, no tag, no
-# GitHub Release — just an image. amd64-only to keep per-merge CI fast; stable
-# releases are multi-arch. Skips docs-only pushes (paths filter).
+# Trunk-based dev channel. Every push to `main` builds and publishes the latest
+# development image tagged :dev (+ :dev-<sha>) so you can test merged code before
+# cutting a stable release (see release.yml). No version bump, no tag, no GitHub
+# Release — just an image. amd64-only to keep per-merge CI fast; stable releases
+# are multi-arch. Skips docs-only pushes (paths filter).
 
 on:
   push:
@@ -14,10 +14,10 @@ on:
       - ".dockerignore"
       - "app/**"
       - "pyproject.toml"
-      - ".github/workflows/edge.yml"
+      - ".github/workflows/dev.yml"
 
 concurrency:
-  group: edge
+  group: dev
   cancel-in-progress: true
 
 jobs:

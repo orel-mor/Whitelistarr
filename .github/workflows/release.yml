@@ -1,7 +1,7 @@
 name: Release
 
 # Manual stable release. Trunk-based: features squash-merge into `main` (linear
-# history) and every push builds the `:dev` edge image (see edge.yml). When you
+# history) and every push builds the `:dev` image (see dev.yml). When you
 # want to ship, run this workflow from the Actions tab:
 #   * dry_run = true  (default) -> preview only: prints the next version + the
 #     commits/notes that would ship to the job summary. Publishes NOTHING.
