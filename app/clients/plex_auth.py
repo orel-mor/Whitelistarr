@@ -28,7 +28,7 @@ class PlexAuth:
             "X-Plex-Client-Identifier": self._client_id,
         }
 
-    def create_pin(self) -> dict[str, Any]:
+    def create_pin(self, forward_url: str | None = None) -> dict[str, Any]:
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
                 f"{PLEX_TV}/api/v2/pins",
@@ -37,14 +37,16 @@ class PlexAuth:
             )
             resp.raise_for_status()
             pin = resp.json()
-        query = urlencode(
-            {
-                "clientID": self._client_id,
-                "code": pin["code"],
-                "context[device][product]": self._product,
-            }
-        )
-        return {"id": pin["id"], "code": pin["code"], "authUrl": f"{AUTH_APP}#?{query}"}
+        query = {
+            "clientID": self._client_id,
+            "code": pin["code"],
+            "context[device][product]": self._product,
+        }
+        # forwardUrl sends the popup back to our self-closing page once authorized,
+        # so it doesn't linger on Plex's "you're signed in" screen.
+        if forward_url:
+            query["forwardUrl"] = forward_url
+        return {"id": pin["id"], "code": pin["code"], "authUrl": f"{AUTH_APP}#?{urlencode(query)}"}
 
     def poll_pin(self, pin_id: int | str) -> str | None:
         with httpx.Client(timeout=30.0) as client:

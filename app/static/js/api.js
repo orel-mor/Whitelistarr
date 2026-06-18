@@ -1,6 +1,6 @@
 "use strict";
 window.api = async function api(path, opts) {
-  const r = await fetch(path, opts);
+  const r = await fetch(path, { cache: "no-store", ...opts });
   let body = null;
   try { body = await r.json(); } catch { /* no body */ }
   return { ok: r.ok, status: r.status, body };

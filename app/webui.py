@@ -307,8 +307,22 @@ def create_webui_router(
         return PlexAuth(client_id=runtime.settings.plex_client_id)
 
     @router.post("/api/plex/pin")
-    async def plex_pin() -> Response:
-        return JSONResponse(_auth().create_pin())
+    async def plex_pin(request: Request) -> Response:
+        forward_url = str(request.url_for("plex_pin_success"))
+        return JSONResponse(_auth().create_pin(forward_url=forward_url))
+
+    @router.get("/plex/auth/success", name="plex_pin_success")
+    async def plex_pin_success() -> Response:
+        # Plex redirects the popup here after authorization; close it so the user
+        # doesn't have to. Polling on the opener picks the token up server-side.
+        html = (
+            '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            "<title>Plex sign-in complete</title></head><body>"
+            "<p>Plex authorization complete. You can close this window.</p>"
+            "<script>if (window.opener) { window.close(); }</script>"
+            "</body></html>"
+        )
+        return Response(content=html, media_type="text/html")
 
     @router.get("/api/plex/pin/{pin_id}")
     async def plex_pin_poll(pin_id: str) -> Response:
