@@ -33,17 +33,19 @@ jobs:
       - name: Resolve dev version
         id: ver
         # Deterministic dev version with NO git tag / release: take the latest
-        # release tag, bump the patch, and append the commit distance since it.
-        # e.g. last release v1.2.0, 5 commits since -> 1.2.1.dev5 (PEP 440, sorts
-        # after 1.2.0 and before 1.2.1). N is commit distance, so it's monotonic
-        # and reproducible (may skip numbers for docs-only pushes that build no image).
+        # release tag, bump the patch, and append the build count since it.
+        # e.g. last release v1.2.0, 5 image builds since -> 1.2.1.dev5 (PEP 440,
+        # sorts after 1.2.0 and before 1.2.1). N counts only commits that touch the
+        # image (same paths as this workflow's trigger), so it tracks builds — a
+        # docs-only push doesn't bump it. Still git-derived, monotonic, reproducible.
         run: |
+          PATHS=(Dockerfile .dockerignore app pyproject.toml .github/workflows/dev.yml)
           if LAST=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null); then
             BASE=${LAST#v}
-            N=$(git rev-list "${LAST}..HEAD" --count)
+            N=$(git rev-list "${LAST}..HEAD" --count -- "${PATHS[@]}")
           else
             BASE=0.0.0
-            N=$(git rev-list HEAD --count)
+            N=$(git rev-list HEAD --count -- "${PATHS[@]}")
           fi
           NEXT=$(echo "$BASE" | awk -F. '{printf "%d.%d.%d", $1, $2, $3 + 1}')
           echo "version=${NEXT}.dev${N}" >> "$GITHUB_OUTPUT"
