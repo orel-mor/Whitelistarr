@@ -1,11 +1,17 @@
 name: Dev
 
 # Trunk-based dev channel. Every push to `main` builds and publishes the latest
-# development image as :dev (rolling) plus an immutable version tag like
-# :1.2.1.dev5 (next patch of the last release + commits since), so you can test
-# and pin merged code before cutting a stable release (see release.yml). No git
-# tag, no GitHub Release — just images. amd64-only to keep per-merge CI fast;
-# stable releases are multi-arch. Skips docs-only pushes (paths filter).
+# development image as :dev (rolling) plus an immutable, traceable tag like
+# :1.9.0.dev4-a8402c8 = <last release>.dev<build #>-<short sha>. No git tag, no
+# GitHub Release — just images. amd64-only to keep per-merge CI fast; stable
+# releases are multi-arch. Skips docs-only pushes (paths filter).
+#
+# The same identity appears three ways, all carrying the commit sha:
+#   tag           1.9.0.dev4-a8402c8   (Docker tag; "-" because tags forbid "+")
+#   /health       1.9.0.dev4+a8402c8   (image __version__; PEP 440, sha in +local)
+#   OCI label     org.opencontainers.image.revision = <full sha>  (docker inspect)
+# Note: .dev is a PEP 440 PRE-release marker, so 1.9.0.dev4 sorts *before* 1.9.0.
+# Nothing here depends on version ordering; it's a deliberate, readable dev label.
 
 on:
   push:
@@ -32,16 +38,10 @@ jobs:
 
       - name: Resolve dev version
         id: ver
-        # One identity per build = <last release> + <build #> + <commit>, with NO
-        # git tag / release created and NO version guessing. Emitted in two forms
-        # because Docker-tag and PEP 440 rules differ but carry the same facts:
-        #   tag     = dev-1.9.0-4-ga8402c8   (pretty Docker tag)
-        #   version = 1.9.0.post4+ga8402c8   (image __version__; PEP 440 post-
-        #             release of the last tag, so it sorts after 1.9.0 / before
-        #             1.9.1 with no guess; the sha is the PEP 440 local segment)
-        # BASE = last release; N = commits since it that touch the image (same
-        # paths as this workflow's trigger), so N is the build count, not docs
-        # pushes. SHA pins the exact source commit (deployed image -> commit).
+        # BASE = last release; N = build count = commits since it that touch the
+        # image (same paths as this workflow's trigger), so docs pushes don't bump
+        # it; SHA pins the exact source commit. Two forms: "+" for the PEP 440
+        # __version__, "-" for the Docker tag (which forbids "+").
         run: |
           PATHS=(Dockerfile .dockerignore app pyproject.toml .github/workflows/dev.yml)
           if LAST=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null); then
@@ -52,8 +52,21 @@ jobs:
             N=$(git rev-list HEAD --count -- "${PATHS[@]}")
           fi
           SHA=$(git rev-parse --short HEAD)
-          echo "version=${BASE}.post${N}+g${SHA}" >> "$GITHUB_OUTPUT"
-          echo "tag=dev-${BASE}-${N}-g${SHA}" >> "$GITHUB_OUTPUT"
+          echo "version=${BASE}.dev${N}+${SHA}" >> "$GITHUB_OUTPUT"
+          echo "tag=${BASE}.dev${N}-${SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Docker metadata (tags + OCI labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            orelmor/whitelistarr
+            ghcr.io/orel-mor/whitelistarr
+          tags: |
+            type=raw,value=dev
+            type=raw,value=${{ steps.ver.outputs.tag }}
+          # OCI labels (revision=<full sha>, source, created, ...) are added
+          # automatically -> `docker inspect` resolves any tag back to its commit.
 
       - uses: docker/setup-buildx-action@v4
 
@@ -78,11 +91,8 @@ jobs:
           platforms: linux/amd64
           build-args: |
             SETUPTOOLS_SCM_PRETEND_VERSION_FOR_WHITELISTARR=${{ steps.ver.outputs.version }}
-          tags: |
-            orelmor/whitelistarr:dev
-            orelmor/whitelistarr:${{ steps.ver.outputs.tag }}
-            ghcr.io/orel-mor/whitelistarr:dev
-            ghcr.io/orel-mor/whitelistarr:${{ steps.ver.outputs.tag }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
