@@ -1,15 +1,24 @@
 name: Release
 
-# Merge to main -> python-semantic-release cuts a STABLE release (GitHub Release
-# + CHANGELOG) and publishes a multi-arch image tagged :latest + :<version>.
-# Docker steps only run when the commits warrant a release.
+# Manual stable release. Trunk-based: features squash-merge into `main` (linear
+# history) and every push builds the `:dev` edge image (see edge.yml). When you
+# want to ship, run this workflow from the Actions tab:
+#   * dry_run = true  (default) -> preview only: prints the next version + the
+#     commits/notes that would ship to the job summary. Publishes NOTHING.
+#   * dry_run = false           -> python-semantic-release cuts the stable release
+#     (tag + GitHub Release + CHANGELOG) and publishes the multi-arch image tagged
+#     :latest + :<version>, from all commits since the last tag.
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview only — compute version + notes, publish nothing"
+        type: boolean
+        default: true
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
@@ -38,8 +47,31 @@ jobs:
       - name: Test (pytest)
         run: pytest -q
 
+      # --- Dry run: preview only ------------------------------------------------
+      - name: Preview release (dry run)
+        if: ${{ inputs.dry_run }}
+        run: |
+          pip install --quiet python-semantic-release==10.5.3
+          LAST=$(git describe --tags --abbrev=0 2>/dev/null || echo "(none)")
+          NEXT=$(semantic-release version --print 2>/dev/null || true)
+          {
+            echo "## 🔎 Release preview (dry run — nothing published)"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Last tag | \`${LAST}\` |"
+            echo "| Next version | \`${NEXT:-no release-worthy commits}\` |"
+            echo ""
+            echo "### Commits since \`${LAST}\`"
+            echo ""
+            if [ "$LAST" = "(none)" ]; then RANGE=HEAD; else RANGE="${LAST}..HEAD"; fi
+            git log --no-merges --pretty='- %s' "$RANGE"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # --- Real release ---------------------------------------------------------
       - name: Python Semantic Release
         id: release
+        if: ${{ !inputs.dry_run }}
         uses: python-semantic-release/python-semantic-release@v10.5.3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -48,22 +80,22 @@ jobs:
           commit: "false"
 
       - name: Set up QEMU
-        if: steps.release.outputs.released == 'true'
+        if: ${{ !inputs.dry_run && steps.release.outputs.released == 'true' }}
         uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
-        if: steps.release.outputs.released == 'true'
+        if: ${{ !inputs.dry_run && steps.release.outputs.released == 'true' }}
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to Docker Hub
-        if: steps.release.outputs.released == 'true'
+        if: ${{ !inputs.dry_run && steps.release.outputs.released == 'true' }}
         uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Log in to GHCR
-        if: steps.release.outputs.released == 'true'
+        if: ${{ !inputs.dry_run && steps.release.outputs.released == 'true' }}
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -71,7 +103,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push image
-        if: steps.release.outputs.released == 'true'
+        if: ${{ !inputs.dry_run && steps.release.outputs.released == 'true' }}
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -89,14 +121,14 @@ jobs:
           provenance: false
 
       - name: Publish GitHub Release
-        if: steps.release.outputs.released == 'true'
+        if: ${{ !inputs.dry_run && steps.release.outputs.released == 'true' }}
         uses: python-semantic-release/publish-action@v10.5.3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ steps.release.outputs.tag }}
 
-      - name: Label released PR + issues
-        if: steps.release.outputs.released == 'true'
+      - name: Label released PRs + issues
+        if: ${{ !inputs.dry_run && steps.release.outputs.released == 'true' }}
         uses: actions/github-script@v9
         env:
           VERSION: ${{ steps.release.outputs.version }}
@@ -110,31 +142,44 @@ jobs:
               try { await github.rest.issues.getLabel({ owner, repo, name }); }
               catch (e) { if (e.status === 404) await github.rest.issues.createLabel({ owner, repo, name, color, description }); }
             }
-            async function mark(number) {
+            await ensureLabel('released', '0e8a16', 'Shipped in a stable release');
+
+            // Trunk-based + batched release: walk every commit from the previous
+            // tag up to HEAD, collect the PRs that introduced them, and label them.
+            const { execSync } = require('child_process');
+            let range = 'HEAD';
+            try {
+              const prev = execSync('git describe --tags --abbrev=0 HEAD^ 2>/dev/null').toString().trim();
+              if (prev) range = `${prev}..HEAD`;
+            } catch (e) { /* first release: no previous tag */ }
+            const shas = execSync(`git rev-list ${range}`).toString().split('\n').filter(Boolean);
+
+            const seenPr = new Set();
+            const seenIssue = new Set();
+            async function mark(number, set) {
+              if (set.has(number)) return;
+              set.add(number);
               await github.rest.issues.addLabels({ owner, repo, issue_number: number, labels: ['released'] });
               await github.rest.issues.createComment({ owner, repo, issue_number: number, body: note });
             }
-            await ensureLabel('released', '0e8a16', 'Shipped in a stable release');
-
-            const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner, repo, commit_sha: context.sha });
-            const seen = new Set();
-            for (const pr of prs) {
-              await mark(pr.number);
-              // Issues this PR closed via "Closes #N" — label + note them too.
-              const q = await github.graphql(
-                `query($owner:String!,$repo:String!,$pr:Int!){
-                   repository(owner:$owner,name:$repo){
-                     pullRequest(number:$pr){ closingIssuesReferences(first:50){ nodes{ number } } } } }`,
-                { owner, repo, pr: pr.number });
-              for (const issue of q.repository.pullRequest.closingIssuesReferences.nodes) {
-                if (seen.has(issue.number)) continue;
-                seen.add(issue.number);
-                await mark(issue.number);
+            for (const sha of shas) {
+              const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner, repo, commit_sha: sha });
+              for (const pr of prs) {
+                if (seenPr.has(pr.number)) continue;
+                await mark(pr.number, seenPr);
+                const q = await github.graphql(
+                  `query($owner:String!,$repo:String!,$pr:Int!){
+                     repository(owner:$owner,name:$repo){
+                       pullRequest(number:$pr){ closingIssuesReferences(first:50){ nodes{ number } } } } }`,
+                  { owner, repo, pr: pr.number });
+                for (const issue of q.repository.pullRequest.closingIssuesReferences.nodes) {
+                  await mark(issue.number, seenIssue);
+                }
               }
             }
 
       - name: Notify (Apprise / Discord)
-        if: steps.release.outputs.released == 'true'
+        if: ${{ !inputs.dry_run && steps.release.outputs.released == 'true' }}
         continue-on-error: true
         env:
           APPRISE_URL: ${{ secrets.APPRISE_NOTIFY_URL }}

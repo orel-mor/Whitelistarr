@@ -71,8 +71,9 @@ ignore = ["E501", "B008"]
 # version is derived from the tag by setuptools-scm) — so `main` stays free of
 # `chore(release)` bot commits.
 #   feat: -> minor   fix: -> patch   feat!: / BREAKING CHANGE -> major
-# Branch model: feature branch -> `dev` -> `main`. Tags on `main` are stable;
-# the permanent `dev` branch tags prereleases (1.2.0-dev.1).
+# Trunk-based: `main` is the only branch. PSR runs only on a manual
+# `release.yml` dispatch and tags a stable release from all commits since the
+# last tag. The :dev edge image (edge.yml) is built per push with no tag/release.
 # ---------------------------------------------------------------------------
 [tool.semantic_release]
 tag_format = "v{version}"
@@ -82,11 +83,6 @@ commit_author = "github-actions[bot] <github-actions[bot]@users.noreply.github.c
 [tool.semantic_release.branches.main]
 match = "main"
 prerelease = false
-
-[tool.semantic_release.branches.dev]
-match = "dev"
-prerelease = true
-prerelease_token = "dev"
 
 [tool.semantic_release.changelog]
 # Custom emoji-section template lives in templates/ (vendored from PSR's

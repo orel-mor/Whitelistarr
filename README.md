@@ -301,14 +301,20 @@ conventions, and release process.
 
 ## Releases and CI
 
-The branch model is **feature branch → `dev` → `main`**, with releases automated by
-[python-semantic-release](https://python-semantic-release.readthedocs.io/) from
-[Conventional Commits](https://www.conventionalcommits.org/). Merging a feature PR
-into `dev` cuts a prerelease (multi-arch `:dev` and `:X.Y.Z` images); promoting
-`dev` into `main` (with a merge commit) cuts a stable release (GitHub Release,
-changelog, multi-arch `:latest` and `:X.Y.Z` images). The commit type drives the
-bump (`feat:` → minor, `fix:` → patch, `feat!:`/`BREAKING CHANGE:` → major;
-`docs:`/`chore:`/`test:` → none).
+The project is **trunk-based**: `main` is the only long-lived branch. Feature
+branches squash-merge into `main` (linear history), and every push builds the
+bleeding-edge **`:dev`** image (amd64) for testing — no version, no release.
+
+**Stable releases are cut on demand.** Run the **Release** workflow from the
+Actions tab (`dry_run` on by default → previews the next version + notes;
+`dry_run` off → ships).
+[python-semantic-release](https://python-semantic-release.readthedocs.io/) then
+tags the version from the [Conventional Commits](https://www.conventionalcommits.org/)
+since the last tag, writes the changelog, and publishes the multi-arch `:latest`
+and `:X.Y.Z` images. The commit type drives the bump (`feat:` → minor, `fix:` →
+patch, `feat!:`/`BREAKING CHANGE:` → major; `docs:`/`chore:`/`test:` → none).
+
+> Use `:latest` for stable, `:dev` to test the newest merged code.
 
 Pull requests also run tests, lint, CodeQL, a dependency audit, and a Trivy image
 scan. See [`.github/workflows/`](.github/workflows/) for the full pipeline.
