@@ -1,0 +1,65 @@
+name: Docker refresh
+
+# Rebuild + republish the current :latest weekly with fresh base layers, so
+# Debian/Python security patches land between feature releases without needing
+# a code change. `pull: true` + `no-cache: true` force a fresh base image and
+# re-run `apt upgrade` in the Dockerfile. Re-tags the current released version
+# (derived from the latest git tag via setuptools-scm) plus :latest.
+
+on:
+  schedule:
+    - cron: "0 5 * * 1" # Mondays 05:00 UTC
+  workflow_dispatch: {}
+
+concurrency:
+  group: docker-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Rebuild + push :latest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # tags needed for setuptools-scm version
+
+      - name: Resolve released version
+        id: ver
+        run: echo "version=$(git describe --tags --abbrev=0 | sed 's/^v//')" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image (fresh base)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          pull: true
+          no-cache: true
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            SETUPTOOLS_SCM_PRETEND_VERSION_FOR_WHITELISTARR=${{ steps.ver.outputs.version }}
+          tags: |
+            orelmor/whitelistarr:latest
+            orelmor/whitelistarr:${{ steps.ver.outputs.version }}
+            ghcr.io/orel-mor/whitelistarr:latest
+            ghcr.io/orel-mor/whitelistarr:${{ steps.ver.outputs.version }}
+          provenance: false
