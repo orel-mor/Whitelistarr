@@ -188,12 +188,13 @@ input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); bo
 .group h2 { text-transform: none; font-weight: 620; }
 
 /* Logs view. */
-.logs-controls { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-.logs-controls select, .logs-interval {
+.logs-controls { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.logs-controls select, .logs-num {
   background: var(--card2); color: var(--text); border: 1px solid var(--border);
   border-radius: 8px; padding: 5px 8px; font-size: 13px;
 }
-.logs-interval { width: 56px; }
+.logs-num { width: 64px; }
+.logs-lines { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
 .logs {
   margin: 16px 24px; padding: 12px 14px; height: 62vh; overflow: auto;
   background: #0b0e12; border: 1px solid var(--border); border-radius: var(--r);

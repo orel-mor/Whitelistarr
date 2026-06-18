@@ -265,13 +265,16 @@ document.addEventListener("alpine:init", () => {
   }));
 
   Alpine.data("logsView", () => ({
-    lines: [], lastId: 0, level: "", auto: true, intervalSec: 3, timer: null,
+    // Portainer-style: each refresh fetches the last `tailN` lines and replaces the
+    // view. Bigger tailN = more history shown (bounded by the in-memory buffer).
+    lines: [], level: "", auto: true, intervalSec: 3, tailN: 100, timer: null,
     async start() {
       await this.tick();
       this.schedule();
-      // Reschedule when the user toggles auto-refresh or changes the interval.
       this.$watch("auto", () => this.schedule());
       this.$watch("intervalSec", () => this.schedule());
+      this.$watch("tailN", () => this.tick());
+      this.$watch("level", () => this.tick());
       document.addEventListener("visibilitychange", () => {
         if (this.active() && this.auto) this.tick();
       });
@@ -287,19 +290,13 @@ document.addEventListener("alpine:init", () => {
       }, secs * 1000);
     },
     async tick() {
-      const q = `/api/logs?after=${this.lastId}` + (this.level ? `&level=${this.level}` : "");
+      const n = Math.max(1, Number(this.tailN) || 100);
+      const q = `/api/logs?tail=${n}` + (this.level ? `&level=${this.level}` : "");
       const r = await api(q);
       if (!r.ok || !r.body) return;
-      if (r.body.lines.length) {
-        this.lines.push(...r.body.lines);
-        if (this.lines.length > 1000) this.lines.splice(0, this.lines.length - 1000);
-        this.lastId = r.body.last_id;
-        this.$nextTick(() => this.scrollDown());
-      }
+      this.lines = r.body.lines;
+      this.$nextTick(() => this.scrollDown());
     },
-    // Level change re-queries from scratch so the filter applies to history too.
-    reset() { this.lines = []; this.lastId = 0; this.tick(); },
-    clearView() { this.lines = []; },
     scrollDown() { const b = this.$refs.box; if (b) b.scrollTop = b.scrollHeight; },
     logTime(iso) { return (iso || "").replace("T", " ").slice(11, 19); },
   }));

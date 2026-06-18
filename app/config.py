@@ -133,6 +133,11 @@ class Settings(BaseSettings):
     reverse: bool = False  # one-shot: remove all managed labels, then exit
     log_level: str = "info"
     state_db_path: str = "/data/state.db"
+    # Rolling on-disk log file (empty disables). log_file_lines bounds its size via
+    # rotation (current + 1 backup). The in-memory buffer the Logs tab reads stays
+    # small for low memory use; the file holds the deeper history.
+    log_file: str = "/data/whitelistarr.log"
+    log_file_lines: int = 10000
 
     # --- Web UI ---
     feature_ui: bool = True

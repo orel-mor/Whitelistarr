@@ -232,6 +232,20 @@ def test_logs_endpoint_after_returns_only_newer(tmp_path):
     assert any(line["message"] == "after-marker" for line in body["lines"])
 
 
+def test_logs_endpoint_tail_limits_to_last_n(tmp_path):
+    import logging
+
+    from app.logbuffer import LOG_BUFFER
+
+    for i in range(6):
+        LOG_BUFFER.handle(
+            logging.LogRecord("t", logging.INFO, __file__, 1, f"tail-marker-{i}", None, None)
+        )
+    body = _client(tmp_path).get("/api/logs?tail=2").json()
+    assert len(body["lines"]) == 2
+    assert body["lines"][-1]["message"] == "tail-marker-5"
+
+
 def test_connection_test_ok(tmp_path):
     resp = _client(tmp_path).post("/api/connections/test/plex")
     assert resp.status_code == 200

@@ -281,7 +281,11 @@
           <header class="page-head">
             <h1>Logs</h1>
             <div class="logs-controls">
-              <select x-model="level" @change="reset()">
+              <label class="logs-lines">Lines
+                <input class="logs-num" type="number" min="1" max="1000" step="50"
+                       x-model.number="tailN" title="How many recent lines to show" />
+              </label>
+              <select x-model="level">
                 <option value="">All levels</option>
                 <option value="DEBUG">Debug+</option>
                 <option value="INFO">Info+</option>
@@ -289,11 +293,10 @@
                 <option value="ERROR">Error+</option>
               </select>
               <label class="toggle"><input type="checkbox" x-model="auto" /> Auto-refresh</label>
-              <input class="logs-interval" type="number" min="1" x-model.number="intervalSec"
+              <input class="logs-num" type="number" min="1" x-model.number="intervalSec"
                      :disabled="!auto" title="Refresh interval (seconds)" />
               <span class="muted">s</span>
               <button class="btn small" @click="tick()">Refresh</button>
-              <button class="btn small" @click="clearView()">Clear</button>
             </div>
           </header>
           <pre class="logs" x-ref="box"><template x-for="l in lines" :key="l.id"><div class="log-line" :class="'lvl-' + l.level.toLowerCase()"><span class="log-time" x-text="logTime(l.time)"></span> <span class="log-level" x-text="l.level"></span> <span class="log-logger" x-text="l.logger"></span> <span x-text="l.message"></span></div></template></pre>

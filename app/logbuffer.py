@@ -16,7 +16,7 @@ from typing import Any
 
 
 class LogBuffer:
-    def __init__(self, capacity: int = 2000) -> None:
+    def __init__(self, capacity: int = 1000) -> None:
         self._records: deque[dict[str, Any]] = deque(maxlen=capacity)
         self._lock = threading.Lock()
         self._next_id = 1
@@ -40,18 +40,27 @@ class LogBuffer:
             self._next_id += 1
             self._records.append(entry)
 
-    def records(self, after: int = 0, level: str | None = None) -> list[dict[str, Any]]:
-        """Return records with ``id > after`` at or above ``level`` (oldest first)."""
+    def records(
+        self, after: int = 0, level: str | None = None, tail: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Return records with ``id > after`` at or above ``level`` (oldest first).
+
+        ``tail`` keeps only the most recent N of the filtered result (the UI's
+        Portainer-style "lines" control).
+        """
         threshold = logging.getLevelName(level.upper()) if level else 0
         if not isinstance(threshold, int):
             threshold = 0
         with self._lock:
             snapshot = list(self._records)
-        return [
+        out = [
             {k: v for k, v in r.items() if k != "levelno"}
             for r in snapshot
             if r["id"] > after and r["levelno"] >= threshold
         ]
+        if tail is not None and tail >= 0:
+            out = out[-tail:] if tail else []
+        return out
 
     def handler(self) -> logging.Handler:
         """A ``logging.Handler`` that feeds this buffer (memoized)."""
