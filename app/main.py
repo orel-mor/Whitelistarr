@@ -186,12 +186,18 @@ def create_application(settings: Settings) -> Any:
     tracker = StatusTracker()
 
     configured = not settings.runtime_errors()
-    components = build_components(settings, tracker=tracker) if configured else None
+    # The onboarding gate only applies in UI mode (headless deploys have no wizard).
+    # While the wizard is unfinished, stay UI-only so no routines run.
+    onboarded = settings.onboarding_complete or not _ui_enabled(settings)
+    ready = configured and onboarded
+    components = build_components(settings, tracker=tracker) if ready else None
     if not configured:
         log.warning(
             "Not fully configured: %s — starting UI only.",
             "; ".join(settings.runtime_errors()),
         )
+    elif not onboarded:
+        log.info("Onboarding not finished — starting UI only until completed.")
 
     runtime = Runtime(settings, components, tracker=tracker)
 

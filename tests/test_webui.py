@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from app.config import Settings
 from app.configstore import ConfigStore
 from app.runtime import ReloadResult
+from app.status import StatusTracker
 from app.webui import create_webui_router
 
 KEY = Fernet.generate_key().decode()
@@ -21,6 +22,7 @@ class FakeRuntime:
         self._reload_result = reload_result or ReloadResult(ok=True)
         self.reloaded_with = None
         self.components = components
+        self.tracker = StatusTracker()
 
     def reload(self, new_settings):
         self.reloaded_with = new_settings
@@ -117,6 +119,51 @@ def test_save_ignores_unknown_keys(tmp_path):
     client, store, _ = _client(tmp_path)
     client.post("/api/config", json={"plex_url": "x", "evil": "y"})
     assert "evil" not in store.load()
+
+
+def _fully_configured():
+    return Settings(
+        plex_url="http://plex:32400", plex_token="t",
+        radarr_url="http://radarr:7878", radarr_api_key="rk",
+        sonarr_url="http://sonarr:8989", sonarr_api_key="sk",
+        tag_label_map="a:b",
+    )
+
+
+def test_status_reports_onboarding_incomplete_with_next_step(tmp_path):
+    # Default _client settings: Plex set but Radarr/Sonarr missing -> resume at ARR.
+    from app.onboarding import ARR
+
+    client, _, _ = _client(tmp_path)
+    body = client.get("/api/status").json()
+    assert body["onboarding"]["complete"] is False
+    assert body["onboarding"]["next_step"] == ARR
+
+
+def test_status_reports_onboarding_complete_when_flag_set(tmp_path):
+    settings = _fully_configured()
+    settings.onboarding_complete = True
+    client, _, _ = _client(tmp_path, settings=settings)
+    assert client.get("/api/status").json()["onboarding"]["complete"] is True
+
+
+def test_onboarding_complete_persists_flag_and_reloads(tmp_path):
+    client, store, runtime = _client(tmp_path, settings=_fully_configured())
+    resp = client.post("/api/onboarding/complete", json={})
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+    assert store.load()["onboarding_complete"] is True  # persisted
+    assert runtime.reloaded_with is not None             # routines (re)built
+    assert runtime.reloaded_with.onboarding_complete is True
+
+
+def test_onboarding_complete_409_when_not_fully_configured(tmp_path):
+    # Pressing Finish with incomplete config must not flip the flag or start routines.
+    client, store, runtime = _client(tmp_path)  # Radarr/Sonarr missing
+    resp = client.post("/api/onboarding/complete", json={})
+    assert resp.status_code == 409
+    assert runtime.reloaded_with is None
+    assert not store.exists() or not store.load().get("onboarding_complete")
 
 
 def test_action_sweep_uses_runtime_label_sync(tmp_path):

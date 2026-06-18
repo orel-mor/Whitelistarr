@@ -539,6 +539,12 @@ document.addEventListener("alpine:init", () => {
     tagRows: [{ tag: "", label: "" }],
     notify: { enabled: false, tautulliUrl: "", tautulliKey: "", tautulliOk: null,
               seerrUrl: "", seerrKey: "", seerrOk: null, apprise: "" },
+    init() {
+      // Resume at the first incomplete step the server derived from saved config,
+      // so a reload (or a returning user) lands where setup left off — not step 0.
+      const s = this.$store.app.onboardingStep;
+      if (typeof s === "number" && s > 0 && s <= this.last) this.step = s;
+    },
     next() { if (this.step < this.last) this.step++; },
     back() { if (this.step > 0) this.step--; },
     onPlexConnected() {
@@ -595,6 +601,19 @@ document.addEventListener("alpine:init", () => {
       this.next();
     },
     skipNotify() { this.next(); },
-    finish() { location.hash = "#/status"; this.$store.app.route = "status"; },
+    async finish() {
+      // Mark onboarding done server-side; this is what finally builds the clients
+      // and starts the routines. Refuse to leave the wizard if config is incomplete.
+      const r = await apiPost("/api/onboarding/complete", {});
+      if (!r.ok || (r.body && r.body.ok === false)) {
+        const b = r.body || {};
+        const msg = b.error || (b.errors && b.errors.join("; ")) || "check your config";
+        this.$store.app.toast("Couldn't finish setup: " + msg, "err");
+        return;
+      }
+      this.$store.app.onboardingComplete = true;
+      location.hash = "#/status";
+      this.$store.app.route = "status";
+    },
   }));
 });

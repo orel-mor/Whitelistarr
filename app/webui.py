@@ -20,6 +20,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.config import Settings
 from app.config_schema import CONFIG_SCHEMA, field_keys, secret_keys
+from app.onboarding import next_incomplete_step
 
 log = logging.getLogger(__name__)
 
@@ -263,7 +264,29 @@ def create_webui_router(
             "history": runtime.tracker.history(),
             "connections": connections,
             "label_map": settings.label_map,
+            "onboarding": {
+                "complete": bool(getattr(settings, "onboarding_complete", False)),
+                "next_step": next_incomplete_step(settings),
+            },
         }
+
+    @router.post("/api/onboarding/complete")
+    async def onboarding_complete() -> Response:
+        # Pressed at the end of the wizard. Refuse while config is incomplete so the
+        # flag never flips on a half-set-up install. On success, persist the flag and
+        # reload — which finally builds the clients and starts the routines.
+        settings = runtime.settings
+        if settings.runtime_errors():
+            return JSONResponse(
+                {"error": "Not fully configured", "errors": settings.runtime_errors()},
+                status_code=409,
+            )
+        store.save({"onboarding_complete": True})
+        result = runtime.reload(Settings(**store.load()))
+        _log_action("onboarding-complete", {"ok": result.ok})
+        return JSONResponse(
+            {"ok": result.ok, "error": result.error, "restart_required": result.restart_required}
+        )
 
     @router.get("/api/logs")
     async def logs(after: int = 0, level: str | None = None, tail: int | None = None) -> dict:

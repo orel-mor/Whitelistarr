@@ -104,8 +104,10 @@ class Runtime:
         # Mid-onboarding the user saves config one step at a time, so a save can
         # land while config is still incomplete (e.g. Plex set but Radarr/Sonarr
         # not). Mirror boot: stay "UI only" — don't build clients or start the
-        # sweep/reactive jobs until everything required is present.
-        if new_settings.runtime_errors():
+        # sweep/reactive jobs until everything required is present AND the user has
+        # finished onboarding (pressed Finish, setting onboarding_complete).
+        onboarded = getattr(new_settings, "onboarding_complete", True)
+        if new_settings.runtime_errors() or not onboarded:
             self._teardown()
             self._components = None
             self._settings = new_settings
