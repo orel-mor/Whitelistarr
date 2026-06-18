@@ -71,8 +71,8 @@ ignore = ["E501", "B008"]
 # version is derived from the tag by setuptools-scm) — so `main` stays free of
 # `chore(release)` bot commits.
 #   feat: -> minor   fix: -> patch   feat!: / BREAKING CHANGE -> major
-# Trunk-based: tags on `main` are stable; the on-demand `beta` branch tags
-# prereleases (1.2.0-beta.1).
+# Branch model: feature branch -> `dev` -> `main`. Tags on `main` are stable;
+# the permanent `dev` branch tags prereleases (1.2.0-dev.1).
 # ---------------------------------------------------------------------------
 [tool.semantic_release]
 tag_format = "v{version}"
@@ -83,10 +83,10 @@ commit_author = "github-actions[bot] <github-actions[bot]@users.noreply.github.c
 match = "main"
 prerelease = false
 
-[tool.semantic_release.branches.beta]
-match = "beta"
+[tool.semantic_release.branches.dev]
+match = "dev"
 prerelease = true
-prerelease_token = "beta"
+prerelease_token = "dev"
 
 [tool.semantic_release.changelog]
 # Custom emoji-section template lives in templates/ (vendored from PSR's

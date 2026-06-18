@@ -1,10 +1,10 @@
 version: 2
 updates:
-  # Python deps (pyproject.toml). PRs target main (trunk-based); each merge can
-  # cut a release. Minor/patch grouped to cut PR noise.
+  # Python deps (pyproject.toml). PRs target `dev` (the integration branch); each
+  # merge can cut a prerelease. Minor/patch grouped to cut PR noise.
   - package-ecosystem: pip
     directory: "/"
-    target-branch: main
+    target-branch: dev
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -18,7 +18,7 @@ updates:
   # GitHub Actions versions used in workflows.
   - package-ecosystem: github-actions
     directory: "/"
-    target-branch: main
+    target-branch: dev
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
