@@ -30,7 +30,7 @@
           <button class="btn primary" @click="next()">Get started</button>
         </div>
 
-        <div class="wizard-panel" x-show="step===1" @plex-connected="next()">
+        <div class="wizard-panel" x-show="step===1" @plex-connected="onPlexConnected()">
           <h1>Connect Plex</h1>
           <div x-data="plexSignIn({ withLibraries: true })">
             <template x-if="phase==='idle'">
@@ -89,6 +89,7 @@
           </div>
           <div class="wizard-nav">
             <button class="btn" @click="back()">Back</button>
+            <button class="btn primary" @click="next()" x-show="plexConnected">Next</button>
           </div>
         </div>
 

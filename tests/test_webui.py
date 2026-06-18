@@ -277,6 +277,34 @@ def test_plex_libraries_empty_when_no_component(tmp_path):
     assert resp.json()["libraries"] == []
 
 
+def test_plex_libraries_from_saved_creds_during_onboarding(tmp_path, monkeypatch):
+    # Mid-onboarding the live components aren't built yet (config still incomplete),
+    # but Plex is already signed in. The picker must still list libraries by building
+    # a throwaway client from the saved creds.
+    import app.webui as webui
+
+    libs = [{"title": "Movies", "type": "movie"}]
+    built = {}
+
+    def fake_make_plex_client(url, token):
+        built["url"], built["token"] = url, token
+        return FakePlexLibClient(libs)
+
+    monkeypatch.setattr(webui, "_make_plex_client", fake_make_plex_client)
+
+    store = ConfigStore(str(tmp_path / "config.json"), KEY)
+    store.save({"plex_url": "http://plex:32400", "plex_token": "tok"})
+    runtime = FakeRuntime(Settings(), components=None)  # not configured yet
+    app = FastAPI()
+    app.include_router(create_webui_router(runtime=runtime, store=store))
+    client = TestClient(app)
+
+    resp = client.get("/api/plex/libraries")
+    assert resp.status_code == 200
+    assert resp.json()["libraries"] == libs
+    assert built == {"url": "http://plex:32400", "token": "tok"}
+
+
 def test_plex_account_reports_connected_and_username(tmp_path):
     store = ConfigStore(str(tmp_path / "config.json"), KEY)
     settings = Settings(plex_url="http://plex:32400", plex_token="t", plex_client_id="cid")
@@ -330,6 +358,15 @@ def test_static_serves_packaged_files(tmp_path):
         "logo.svg",
     ):
         assert client.get(f"/static/{name}").status_code == 200, name
+
+
+def test_static_assets_revalidate(tmp_path):
+    # Static assets must carry a no-cache header so a browser revalidates (ETag)
+    # on each load — otherwise a UI update ships but stale JS keeps being served.
+    client, _, _ = _client(tmp_path)
+    for name in ("index.html", "js/app.js"):
+        resp = client.get(f"/static/{name}")
+        assert "no-cache" in resp.headers.get("cache-control", ""), name
 
 
 def test_logo_served_with_svg_content_type(tmp_path):
