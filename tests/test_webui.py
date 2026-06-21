@@ -402,7 +402,7 @@ def test_static_serves_packaged_files(tmp_path):
     for name in (
         "index.html", "vendor/alpine.min.js", "css/style.css",
         "js/api.js", "js/router.js", "js/store.js", "js/helpers.js", "js/app.js",
-        "logo.svg",
+        "assets/logo.svg", "assets/icon.svg",
     ):
         assert client.get(f"/static/{name}").status_code == 200, name
 
@@ -418,7 +418,7 @@ def test_static_assets_revalidate(tmp_path):
 
 def test_logo_served_with_svg_content_type(tmp_path):
     client, _, _ = _client(tmp_path)
-    resp = client.get("/static/logo.svg")
+    resp = client.get("/static/assets/logo.svg")
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("image/svg+xml")
 
