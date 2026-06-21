@@ -46,7 +46,8 @@ _MEDIA = {
 # STATIC_DIR or read arbitrary files.
 _STATIC_NAMES = (
     "index.html",
-    "logo.svg",
+    "assets/logo.svg",
+    "assets/icon.svg",
     "vendor/alpine.min.js",
     "css/style.css",
     "js/api.js",
