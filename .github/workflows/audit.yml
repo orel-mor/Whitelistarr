@@ -16,7 +16,7 @@ jobs:
     # Advisory for now: reports vulnerable deps without blocking merges.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -29,5 +29,5 @@ jobs:
     if: ${{ github.event_name == 'pull_request' && !github.event.repository.private }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/dependency-review-action@v5.0.0
