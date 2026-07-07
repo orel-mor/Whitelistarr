@@ -40,7 +40,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           image-names: "whitelistarr"
           image-tags: "*.dev*-*" # immutable dev tags (1.9.0.dev4-<sha>); not :dev/:latest/:X.Y.Z
-          cut-off: 1mo
+          cut-off: 30d
           keep-n-most-recent: 5
           dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
 
@@ -57,7 +57,7 @@ jobs:
           image-names: "whitelistarr"
           image-tags: "*"
           tag-selection: untagged
-          cut-off: 1mo
+          cut-off: 30d
           keep-n-most-recent: 10
           dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
 
