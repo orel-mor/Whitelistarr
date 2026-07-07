@@ -73,7 +73,7 @@ jobs:
       - name: Python Semantic Release
         id: release
         if: ${{ !inputs.dry_run }}
-        uses: python-semantic-release/python-semantic-release@v10.5.3
+        uses: python-semantic-release/python-semantic-release@v10.6.1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           # Tag + GitHub Release only. Don't commit the version back: setuptools-scm
@@ -123,7 +123,7 @@ jobs:
 
       - name: Publish GitHub Release
         if: ${{ !inputs.dry_run && steps.release.outputs.released == 'true' }}
-        uses: python-semantic-release/publish-action@v10.5.3
+        uses: python-semantic-release/publish-action@v10.6.1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ steps.release.outputs.tag }}
