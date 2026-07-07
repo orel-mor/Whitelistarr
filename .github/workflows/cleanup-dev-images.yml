@@ -34,7 +34,7 @@ jobs:
       # recent protects the newest builds (incl. the version that also carries the
       # rolling :dev tag) regardless of age.
       - name: Prune immutable dev tags
-        uses: snok/container-retention-policy@v3
+        uses: snok/container-retention-policy@v3.1.0
         with:
           account: orel-mor
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -50,7 +50,7 @@ jobs:
       # by a retained tagged image (so multi-arch :latest/:dev/:X.Y.Z stay intact).
       # keep-n-most-recent adds headroom against racing an in-flight push.
       - name: Prune orphaned untagged manifests
-        uses: snok/container-retention-policy@v3
+        uses: snok/container-retention-policy@v3.1.0
         with:
           account: orel-mor
           token: ${{ secrets.GITHUB_TOKEN }}
