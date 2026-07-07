@@ -28,38 +28,124 @@ jobs:
     name: Prune GHCR dev + untagged images (>30d)
     runs-on: ubuntu-latest
     permissions:
-      packages: write # delete versions of this repo's GHCR package
+      packages: write # list + delete versions of this repo's GHCR package
     steps:
-      # Battle-tested pruner: handles pagination + manifest children. keep-n-most-
-      # recent protects the newest builds (incl. the version that also carries the
-      # rolling :dev tag) regardless of age.
-      - name: Prune immutable dev tags
-        uses: snok/container-retention-policy@v3.1.0
+      - uses: actions/setup-python@v6
         with:
-          account: orel-mor
-          token: ${{ secrets.GITHUB_TOKEN }}
-          image-names: "whitelistarr"
-          image-tags: "*.dev*-*" # immutable dev tags (1.9.0.dev4-<sha>); not :dev/:latest/:X.Y.Z
-          cut-off: 30d
-          keep-n-most-recent: 5
-          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          python-version: "3.12"
+      # Direct GitHub Packages REST pruner (mirrors the Docker Hub job below).
+      # We rolled our own instead of a marketplace action because the built-in
+      # GITHUB_TOKEN can't use the wildcard tag filters those actions rely on
+      # (they require a classic PAT / GitHub App token). This uses only the
+      # temporal token via the /user/packages endpoints — no extra secret.
+      - name: Prune
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && 'true' || 'false' }}
+        run: |
+          python3 - <<'PY'
+          import base64, datetime, json, os, re, urllib.error, urllib.request
 
-      # Sweep orphaned untagged manifests (the sha256:<digest> versions GHCR shows
-      # with no tag). tag-selection: untagged restricts deletion to versions that
-      # carry no tag; the action keeps any platform child manifest still referenced
-      # by a retained tagged image (so multi-arch :latest/:dev/:X.Y.Z stay intact).
-      # keep-n-most-recent adds headroom against racing an in-flight push.
-      - name: Prune orphaned untagged manifests
-        uses: snok/container-retention-policy@v3.1.0
-        with:
-          account: orel-mor
-          token: ${{ secrets.GITHUB_TOKEN }}
-          image-names: "whitelistarr"
-          image-tags: "*"
-          tag-selection: untagged
-          cut-off: 30d
-          keep-n-most-recent: 10
-          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          OWNER, PACKAGE = "orel-mor", "whitelistarr"  # orel-mor is a User account
+          API = f"https://api.github.com/user/packages/container/{PACKAGE}/versions"
+          MANIFEST = f"https://ghcr.io/v2/{OWNER}/{PACKAGE}/manifests"
+          # immutable dev tags only, e.g. 1.9.0.dev4-a8402c8 (not :dev/:latest/:X.Y.Z)
+          DEV_RE = re.compile(r"\.dev\d+-")
+          KEEP = 5            # newest dev builds always kept (incl. the live :dev one)
+          KEEP_UNTAGGED = 10  # headroom against racing an in-flight push
+          DAYS = 30
+          DRY = os.environ.get("DRY_RUN", "false") == "true"
+          TOKEN = os.environ["GHCR_TOKEN"]
+          cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=DAYS)
+
+          GH = {"Authorization": f"Bearer {TOKEN}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28"}
+          # ghcr.io registry wants the token base64-encoded as a Bearer credential
+          REG = {"Authorization": "Bearer " + base64.b64encode(TOKEN.encode()).decode(),
+                 "Accept": "application/vnd.oci.image.index.v1+json, "
+                           "application/vnd.oci.image.manifest.v1+json, "
+                           "application/vnd.docker.distribution.manifest.list.v2+json, "
+                           "application/vnd.docker.distribution.manifest.v2+json"}
+
+          def call(url, method="GET", headers=None):
+              req = urllib.request.Request(url, method=method, headers=headers or GH)
+              with urllib.request.urlopen(req) as r:
+                  raw = r.read()
+                  return (json.loads(raw) if raw else None), r.headers
+
+          # 1. list every package version (paginated via the Link header)
+          versions, url = [], f"{API}?per_page=100"
+          while url:
+              page, hdrs = call(url)
+              versions += page
+              url = next((p[p.index("<") + 1:p.index(">")]
+                          for p in hdrs.get("Link", "").split(",") if 'rel="next"' in p), None)
+
+          def tags(v): return v.get("metadata", {}).get("container", {}).get("tags") or []
+          def when(v):
+              return datetime.datetime.fromisoformat(
+                  (v.get("updated_at") or v["created_at"]).replace("Z", "+00:00"))
+
+          # 2. candidates. A dev victim's tags must ALL be immutable dev tags, so we
+          #    never touch a version that also carries :dev/:latest/:X.Y.Z.
+          dev = sorted((v for v in versions if tags(v) and all(DEV_RE.search(t) for t in tags(v))),
+                       key=when, reverse=True)
+          dev_victims = [v for v in dev[KEEP:] if when(v) < cutoff]
+          untagged = sorted((v for v in versions if not tags(v)), key=when, reverse=True)
+          untagged_victims = [v for v in untagged[KEEP_UNTAGGED:] if when(v) < cutoff]
+
+          # 3. protect multi-arch children of kept tags (fail-closed). A retained
+          #    tag like :latest is an image index whose per-platform child manifests
+          #    show up as untagged versions; deleting one corrupts the live tag.
+          victim_ids = {v["id"] for v in dev_victims}
+          kept_tagged = [v for v in versions if tags(v) and v["id"] not in victim_ids]
+
+          def children(digest):
+              body, _ = call(f"{MANIFEST}/{digest}", headers=REG)
+              return [m["digest"] for m in body.get("manifests", [])] if body else []
+
+          protected, registry_ok = set(), True
+          try:
+              for v in kept_tagged:
+                  protected.update(children(v["name"]))  # version name == digest
+          except (urllib.error.URLError, KeyError, ValueError) as e:
+              # Couldn't resolve a kept tag's manifest -> don't risk deleting a live
+              # child. Drop the untagged sweep; dev indexes are top-level and safe.
+              registry_ok = False
+              untagged_victims = []
+              print(f"::warning::registry manifest fetch failed ({e}); skipping untagged sweep")
+
+          dev_victims = [v for v in dev_victims if v["name"] not in protected]
+          untagged_victims = [v for v in untagged_victims if v["name"] not in protected]
+
+          # 4. delete (DRY-guarded)
+          def label(v): return f"{v['name']} [{', '.join(tags(v)) or '<untagged>'}] ({when(v).date()})"
+          victims = dev_victims + untagged_victims
+          for v in victims:
+              print(f"{'DRY would delete' if DRY else 'deleting'}: {label(v)}")
+              if not DRY:
+                  call(f"{API}/{v['id']}", method="DELETE")
+          print(f"{len(dev_victims)} dev + {len(untagged_victims)} untagged version(s) "
+                f"{'would be ' if DRY else ''}deleted ({len(dev)} dev, {len(untagged)} untagged "
+                f"total; keeping newest {KEEP} dev + {KEEP_UNTAGGED} untagged + any <{DAYS}d).")
+
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a") as fh:
+                  fh.write(f"## 🧹 GHCR dev cleanup ({'dry run — nothing deleted' if DRY else 'deleted'})\n\n")
+                  if not registry_ok:
+                      fh.write("> ⚠️ registry manifest fetch failed — untagged sweep skipped this run.\n\n")
+                  fh.write("| | |\n|---|---|\n")
+                  fh.write(f"| Dev tags total | `{len(dev)}` |\n")
+                  fh.write(f"| Untagged total | `{len(untagged)}` |\n")
+                  fh.write(f"| {'Would prune' if DRY else 'Pruned'} dev | `{len(dev_victims)}` |\n")
+                  fh.write(f"| {'Would prune' if DRY else 'Pruned'} untagged | `{len(untagged_victims)}` |\n")
+                  fh.write(f"| Kept | newest {KEEP} dev + {KEEP_UNTAGGED} untagged + any <{DAYS}d |\n")
+                  if victims:
+                      fh.write(f"\n### {'Would prune' if DRY else 'Pruned'}\n\n")
+                      fh.write("\n".join(f"- `{label(v)}`" for v in victims) + "\n")
+          PY
 
   dockerhub:
     name: Prune Docker Hub dev images (>30d)
