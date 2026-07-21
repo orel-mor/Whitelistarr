@@ -30,7 +30,7 @@ jobs:
     permissions:
       packages: write # list + delete versions of this repo's GHCR package
     steps:
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       # Direct GitHub Packages REST pruner (mirrors the Docker Hub job below).
@@ -151,7 +151,7 @@ jobs:
     name: Prune Docker Hub dev images (>30d)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Prune
