@@ -11,7 +11,7 @@ import logging
 from collections.abc import Iterator
 from datetime import datetime
 
-from app.core.matching import extract_guids, guid_key
+from app.core.matching import extract_guids, guid_key, parse_legacy_guid
 
 log = logging.getLogger(__name__)
 
@@ -44,13 +44,29 @@ class PlexItem:
         self.title = getattr(video, "title", "?")
         self._guid_map: dict[str, str] | None = None
 
+    def _read_current_guids(self) -> dict[str, str]:
+        """Extract ``{source: id}`` from the video's current in-memory metadata.
+
+        Prefers the modern ``guids`` list; falls back to the single legacy ``guid``
+        (e.g. ``com.plexapp.agents.thetvdb://383203?lang=en``) that legacy Plex
+        agents populate when no ``Guid[]`` is present.
+        """
+        ids = [g.id for g in (getattr(self._v, "guids", None) or [])]
+        guid_map = extract_guids(ids)
+        if guid_map:
+            return guid_map
+        legacy = parse_legacy_guid(getattr(self._v, "guid", None) or "")
+        return {legacy[0]: legacy[1]} if legacy else {}
+
     def _guids(self) -> dict[str, str]:
         if self._guid_map is None:
-            ids = [g.id for g in (getattr(self._v, "guids", None) or [])]
-            if not ids and hasattr(self._v, "reload"):
+            guid_map = self._read_current_guids()
+            # A modern item may need a reload before Guid[] is populated; legacy
+            # items resolve from ``guid`` above, so only reload if we found nothing.
+            if not guid_map and hasattr(self._v, "reload"):
                 self._v.reload()
-                ids = [g.id for g in (getattr(self._v, "guids", None) or [])]
-            self._guid_map = extract_guids(ids)
+                guid_map = self._read_current_guids()
+            self._guid_map = guid_map
         return self._guid_map
 
     def _int_guid(self, source: str) -> int | None:
