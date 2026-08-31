@@ -23,9 +23,10 @@ class FakeLabel:
 
 
 class FakeVideo:
-    def __init__(self, title, guids, labels, rating_key=1):
+    def __init__(self, title, guids, labels, rating_key=1, guid=None):
         self.title = title
         self.guids = [FakeGuid(g) for g in guids]
+        self.guid = guid  # legacy single-guid agents (com.plexapp.agents.*)
         self.labels = [FakeLabel(t) for t in labels]
         self.ratingKey = rating_key
         self.added = []
@@ -71,6 +72,35 @@ def test_reloads_when_guids_missing():
     # accessing an id triggers a reload attempt to populate guids
     assert item.tmdb_id is None
     assert v.reloaded is True
+
+
+def test_legacy_agent_guid_used_when_modern_guids_absent():
+    # Legacy Plex agents expose no Guid[]; the single ``guid`` must still match.
+    v = FakeVideo("Ted Lasso", [], [], rating_key=60815,
+                  guid="com.plexapp.agents.thetvdb://383203?lang=en")
+    item = PlexItem(v, "show")
+    assert item.tvdb_id == 383203
+    assert item.guid_keys() == {"tvdb:383203"}
+
+
+def test_legacy_imdb_guid_used_for_movie():
+    v = FakeVideo("Train Dreams", [], [], rating_key=59121,
+                  guid="com.plexapp.agents.imdb://tt29768334?lang=en")
+    assert PlexItem(v, "movie").guid_keys() == {"imdb:tt29768334"}
+
+
+def test_modern_guids_take_precedence_over_legacy_guid():
+    v = FakeVideo("Dune", ["tmdb://603"], [], guid="com.plexapp.agents.imdb://tt1")
+    item = PlexItem(v, "movie")
+    assert item.guid_keys() == {"tmdb:603"}
+    assert v.reloaded is False  # modern Guid[] present -> no reload
+
+
+def test_legacy_guid_does_not_trigger_reload():
+    v = FakeVideo("Ted Lasso", [], [], guid="com.plexapp.agents.thetvdb://100")
+    item = PlexItem(v, "show")
+    assert item.tvdb_id == 100
+    assert v.reloaded is False  # resolved from ``guid`` -> no wasted reload
 
 
 def test_rating_key_is_string():
