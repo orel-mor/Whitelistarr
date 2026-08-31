@@ -94,7 +94,7 @@ def _request():
     )
 
 
-def _monitor(plex, tautulli, notifier, state, events=("watched", "stale")):
+def _monitor(plex, tautulli, notifier, state, events=("watched", "stale"), resolve_item=None):
     return WatchMonitor(
         overseerr=type("O", (), {"iter_requests": lambda self: [_request()]})(),
         tautulli=tautulli,
@@ -106,6 +106,7 @@ def _monitor(plex, tautulli, notifier, state, events=("watched", "stale")):
         stale_after_days=180,
         unwatched_after_days=90,
         now_fn=lambda: NOW,
+        resolve_item=resolve_item,
     )
 
 
@@ -152,3 +153,25 @@ def test_no_notification_when_not_watched_and_not_stale():
     state = StateStore(":memory:")
     _monitor(plex, tautulli, notifier, state).scan()
     assert notifier.sent == []
+
+
+def test_injected_resolver_is_used_instead_of_plex_find_item():
+    # When wired to LabelSync.resolve_plex_item (the *arr id bridge), the monitor
+    # must resolve through it, not plex.find_item — that's how legacy libraries
+    # get their watch/stale lookups resolved.
+    item = FakePlexItem("Dune", "111", added_at=datetime(2026, 6, 1))
+    calls = []
+
+    def resolver(media_type, tmdb_id=None, tvdb_id=None):
+        calls.append((media_type, tmdb_id, tvdb_id))
+        return item
+
+    class ExplodingPlex:
+        def find_item(self, *a, **k):  # must not be called
+            raise AssertionError("plex.find_item should not be used when resolver is injected")
+
+    tautulli = FakeTautulli([{"percent_complete": 95, "date": _epoch(datetime(2026, 6, 10))}])
+    notifier = FakeNotifier()
+    _monitor(ExplodingPlex(), tautulli, notifier, StateStore(":memory:"), resolve_item=resolver).scan()
+    assert calls == [("movie", 603, None)]
+    assert len(notifier.sent) == 1

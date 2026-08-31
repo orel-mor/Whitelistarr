@@ -56,6 +56,7 @@ class WatchMonitor:
         stale_after_days: int,
         unwatched_after_days: int,
         now_fn: Callable[[], datetime] = datetime.now,
+        resolve_item: Callable[..., Any] | None = None,
     ) -> None:
         self._overseerr = overseerr
         self._tautulli = tautulli
@@ -67,6 +68,11 @@ class WatchMonitor:
         self._stale_after_days = stale_after_days
         self._unwatched_after_days = unwatched_after_days
         self._now_fn = now_fn
+        # Resolver for id -> Plex item. Defaults to plex.find_item; wired to
+        # LabelSync.resolve_plex_item so legacy-agent libraries resolve via the
+        # *arr id bridge (Overseerr gives tmdb/tvdb; a legacy item may be indexed
+        # under imdb only).
+        self._resolve_item = resolve_item or plex.find_item
 
     def scan(self) -> dict[str, int]:
         processed = 0
@@ -81,7 +87,7 @@ class WatchMonitor:
         return {"processed": processed, "notified": notified}
 
     def _process(self, req: Any) -> int:
-        item = self._plex.find_item(req.media_type, tmdb_id=req.tmdb_id, tvdb_id=req.tvdb_id)
+        item = self._resolve_item(req.media_type, tmdb_id=req.tmdb_id, tvdb_id=req.tvdb_id)
         if item is None:
             return 0
         rows = self._tautulli.get_history(rating_key=item.rating_key, user=req.requester)

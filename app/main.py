@@ -138,6 +138,7 @@ def build_components(settings: Settings, tracker: Any | None = None) -> Componen
             watched_percent=settings.watched_percent,
             stale_after_days=settings.stale_after_days,
             unwatched_after_days=settings.unwatched_after_days,
+            resolve_item=label_sync.resolve_plex_item,
         )
 
     reactive = ReactivePoller(plex=plex, label_sync=label_sync, radarr=radarr, sonarr=sonarr)

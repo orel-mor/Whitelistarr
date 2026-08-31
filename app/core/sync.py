@@ -14,6 +14,7 @@ from itertools import chain
 from typing import Any
 
 from app.core.labeler import apply_labels, desired_labels, reconcile
+from app.core.matching import guid_key
 
 log = logging.getLogger(__name__)
 
@@ -71,6 +72,9 @@ class LabelSync:
         self._index_ttl = index_ttl_seconds
         self._index: dict[str, set[str]] | None = None
         self._index_at = 0.0
+        # guid_key -> every sibling guid_key on the same *arr item (the id
+        # bridge: tmdb -> {tmdb, imdb}), refreshed alongside the tags index.
+        self._siblings: dict[str, set[str]] = {}
         self._notifier = notifier
         self._state = state
         self._notify_labeled = notify_labeled and notifier is not None
@@ -87,12 +91,62 @@ class LabelSync:
                 index.setdefault(key, set()).update(tags)
         return index
 
+    def _build_index_and_siblings(
+        self,
+    ) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+        """One *arr pass -> (guid_key -> tags, guid_key -> sibling guid_keys).
+
+        The sibling map records, for each id, every other external id on the
+        same *arr item (e.g. ``tmdb:603 -> {tmdb:603, imdb:tt0133093}``) — the
+        bridge that lets a tmdb/tvdb request resolve a legacy Plex item indexed
+        under a different id namespace.
+        """
+        index: dict[str, set[str]] = {}
+        siblings: dict[str, set[str]] = {}
+        for keys, tags in chain(
+            self._radarr.iter_all_with_tags(), self._sonarr.iter_all_with_tags()
+        ):
+            for key in keys:
+                siblings.setdefault(key, set()).update(keys)
+            if not tags:
+                continue
+            for key in keys:
+                index.setdefault(key, set()).update(tags)
+        return index, siblings
+
     def _get_index(self, force: bool = False) -> dict[str, set[str]]:
         now = time.monotonic()
         if force or self._index is None or (now - self._index_at) > self._index_ttl:
-            self._index = self.build_index()
+            self._index, self._siblings = self._build_index_and_siblings()
             self._index_at = now
         return self._index
+
+    def _expand_keys(self, seed: set[str]) -> set[str]:
+        """Expand seed ids to every sibling id on the same *arr item (the bridge)."""
+        self._get_index()  # ensures _siblings is populated/fresh
+        expanded = set(seed)
+        for key in seed:
+            expanded |= self._siblings.get(key, set())
+        return expanded
+
+    def resolve_plex_item(
+        self, media_type: str, tmdb_id: int | None = None, tvdb_id: int | None = None
+    ) -> Any:
+        """Resolve a Plex item from a tmdb/tvdb id, bridging via the *arr ids.
+
+        Expands the id to the matching *arr item's full external-id set before
+        asking Plex, so a legacy item indexed under a different id (e.g. an
+        imdb-only movie) still resolves. When the item isn't in *arr the bare id
+        is used, matching modern libraries exactly as before.
+        """
+        seed: set[str] = set()
+        if tmdb_id is not None:
+            seed.add(guid_key("tmdb", tmdb_id))
+        if tvdb_id is not None:
+            seed.add(guid_key("tvdb", tvdb_id))
+        if not seed:
+            return None
+        return self._plex.find_item_by_keys(media_type, self._expand_keys(seed))
 
     def _desired_for_item(self, item: Any, index: dict[str, set[str]]) -> set[str]:
         tags: set[str] = set()
@@ -152,7 +206,7 @@ class LabelSync:
     def sync_by_ids(
         self, media_type: str, tmdb_id: int | None = None, tvdb_id: int | None = None
     ) -> bool:
-        item = self._plex.find_item(media_type, tmdb_id=tmdb_id, tvdb_id=tvdb_id)
+        item = self.resolve_plex_item(media_type, tmdb_id=tmdb_id, tvdb_id=tvdb_id)
         if item is None:
             log.warning(
                 "No Plex item found for %s tmdb=%s tvdb=%s", media_type, tmdb_id, tvdb_id

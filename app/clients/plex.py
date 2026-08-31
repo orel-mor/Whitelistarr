@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Iterator
 from datetime import datetime
 
@@ -123,6 +124,14 @@ class PlexClient:
 
         self._server = PlexServer(base_url, token)
         self._section_filter = set(sections or [])
+        # Lazily-built {media_type: {guid_key: video}} index, used only as the
+        # legacy/cross-id fallback in find_item_by_keys (getGuid can't resolve
+        # legacy-agent items). Cached so a batch of lookups — e.g. one watch
+        # scan over every Overseerr request — costs a single library scan, not
+        # one per lookup. The sweep is the backstop, so a coarse TTL is fine.
+        self._resolve_index: dict[str, dict[str, object]] | None = None
+        self._resolve_index_at = 0.0
+        self._resolve_ttl = 300.0
 
     def check(self) -> dict:
         try:
@@ -205,25 +214,36 @@ class PlexClient:
     def find_item(
         self, media_type: str, tmdb_id: int | None = None, tvdb_id: int | None = None
     ) -> PlexItem | None:
-        """Find a Plex item by any available external GUID.
+        """Find a Plex item by tmdb/tvdb id. Thin wrapper over find_item_by_keys."""
+        keys: set[str] = set()
+        if tmdb_id is not None:
+            keys.add(guid_key("tmdb", tmdb_id))
+        if tvdb_id is not None:
+            keys.add(guid_key("tvdb", tvdb_id))
+        return self.find_item_by_keys(media_type, keys)
 
-        Uses plexapi's ``getGuid`` (supported for the Plex Movie/TV agents).
-        tmdb is tried first because it is the most reliably populated id from
-        Seerr and the newer Plex agents.
+    def find_item_by_keys(self, media_type: str, keys: set[str]) -> PlexItem | None:
+        """Find a Plex item matching *any* of these ``"<source>:<id>"`` keys.
+
+        Fast path: plexapi's ``getGuid`` for the tmdb/tvdb keys — resolved
+        server-side for the modern Plex Movie/TV agents. Fallback: a cached
+        ``guid_key -> video`` index, which is the only way to resolve
+        legacy-agent items (no modern ``Guid[]`` for getGuid to match) and
+        cross-id requests (e.g. a tmdb request whose legacy Plex item carries
+        only an imdb guid — callers pass the sibling ids so this still matches).
         """
         from plexapi.exceptions import NotFound
 
-        candidates: list[str] = []
-        if tmdb_id is not None:
-            candidates.append(f"tmdb://{tmdb_id}")
-        if tvdb_id is not None:
-            candidates.append(f"tvdb://{tvdb_id}")
-        if not candidates:
+        if not keys:
             return None
 
-        for section in self._sections():
-            if _SECTION_TYPE[section.type] != media_type:
-                continue
+        sections = [s for s in self._sections() if _SECTION_TYPE[s.type] == media_type]
+        candidates = [
+            f"{src}://{val}"
+            for src, _, val in (key.partition(":") for key in keys)
+            if src in ("tmdb", "tvdb") and val
+        ]
+        for section in sections:
             for guid in candidates:
                 try:
                     video = section.getGuid(guid)
@@ -231,4 +251,33 @@ class PlexClient:
                     video = None
                 if video is not None:
                     return PlexItem(video, media_type)
+
+        # Fallback: consult the cached index (built once per TTL window).
+        index = self._resolution_index(media_type)
+        for key in keys:
+            video = index.get(key)
+            if video is not None:
+                return PlexItem(video, media_type)
         return None
+
+    def _resolution_index(self, media_type: str) -> dict[str, object]:
+        """Cached ``{guid_key: video}`` for one media type, for legacy fallback.
+
+        Rebuilt when older than the TTL. Scans each matching section once and
+        keys every video by all of its guid_keys (which include legacy-agent
+        ids), so a getGuid miss can still be resolved by any known id.
+        """
+        now = time.monotonic()
+        if self._resolve_index is None or (now - self._resolve_index_at) > self._resolve_ttl:
+            self._resolve_index = {}
+            self._resolve_index_at = now
+        if media_type not in self._resolve_index:
+            index: dict[str, object] = {}
+            for section in self._sections():
+                if _SECTION_TYPE[section.type] != media_type:
+                    continue
+                for video in section.all():
+                    for key in PlexItem(video, media_type).guid_keys():
+                        index.setdefault(key, video)
+            self._resolve_index[media_type] = index
+        return self._resolve_index[media_type]

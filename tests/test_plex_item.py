@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 
+from plexapi.exceptions import NotFound
+
 from app.clients.plex import PlexClient, PlexItem, configure_plex_identity
 
 
@@ -121,10 +123,22 @@ class FakeSection:
         self.type = type_
         self.title = title
         self._videos = videos
+        self.all_calls = 0  # counts full scans, to assert the resolve cache holds
 
     def search(self, sort=None, maxresults=None):
         ordered = sorted(self._videos, key=lambda v: v.addedAt, reverse=True)
         return ordered[:maxresults] if maxresults else ordered
+
+    def getGuid(self, guid):
+        # Mirror plexapi: matches only the modern Guid[] list, never legacy .guid.
+        for v in self._videos:
+            if guid in [g.id for g in (getattr(v, "guids", None) or [])]:
+                return v
+        raise NotFound(guid)
+
+    def all(self):
+        self.all_calls += 1
+        return list(self._videos)
 
 
 class FakeServer:
@@ -136,6 +150,9 @@ def _client_with(sections):
     client = object.__new__(PlexClient)
     client._server = FakeServer(sections)
     client._section_filter = set()
+    client._resolve_index = None
+    client._resolve_index_at = 0.0
+    client._resolve_ttl = 300.0
     return client
 
 
@@ -176,3 +193,54 @@ def test_recently_added_none_since_returns_all():
     ])
     items = _client_with([section]).recently_added(since=None)
     assert {i.title for i in items} == {"A", "B"}
+
+
+# --- find_item_by_keys: getGuid fast path + cached legacy fallback ----------
+
+def test_find_item_by_keys_getguid_fast_path_no_scan():
+    section = FakeSection("movie", "Movies", [FakeVideo("Dune", ["tmdb://603"], [])])
+    client = _client_with([section])
+    item = client.find_item_by_keys("movie", {"tmdb:603"})
+    assert item is not None and item.title == "Dune"
+    assert section.all_calls == 0  # getGuid resolved it -> never scanned
+
+
+def test_find_item_by_keys_legacy_scan_fallback():
+    # Legacy agent: no modern Guid[], so getGuid misses and the scan resolves it.
+    v = FakeVideo("Ted Lasso", [], [], rating_key=1,
+                  guid="com.plexapp.agents.thetvdb://383203?lang=en")
+    section = FakeSection("show", "TV", [v])
+    client = _client_with([section])
+    item = client.find_item_by_keys("show", {"tvdb:383203"})
+    assert item is not None and item.title == "Ted Lasso"
+    assert section.all_calls == 1
+
+
+def test_find_item_by_keys_cross_id_match_via_sibling_key():
+    # tmdb request bridged to an imdb-only legacy item: the caller passes both
+    # sibling keys, and the imdb one matches on the scan.
+    v = FakeVideo("Train Dreams", [], [], guid="com.plexapp.agents.imdb://tt29768334?lang=en")
+    client = _client_with([FakeSection("movie", "Movies", [v])])
+    item = client.find_item_by_keys("movie", {"tmdb:29768334", "imdb:tt29768334"})
+    assert item is not None and item.title == "Train Dreams"
+
+
+def test_find_item_by_keys_reuses_cached_index_across_lookups():
+    v = FakeVideo("Ted Lasso", [], [], guid="com.plexapp.agents.thetvdb://100")
+    section = FakeSection("show", "TV", [v])
+    client = _client_with([section])
+    assert client.find_item_by_keys("show", {"tvdb:100"}) is not None
+    assert client.find_item_by_keys("show", {"tvdb:100"}) is not None
+    assert section.all_calls == 1  # second lookup hit the cached index
+
+
+def test_find_item_by_keys_returns_none_when_absent():
+    v = FakeVideo("Ted Lasso", [], [], guid="com.plexapp.agents.thetvdb://100")
+    client = _client_with([FakeSection("show", "TV", [v])])
+    assert client.find_item_by_keys("show", {"tvdb:999"}) is None
+
+
+def test_find_item_delegates_to_find_item_by_keys():
+    section = FakeSection("movie", "Movies", [FakeVideo("Dune", ["tmdb://603"], [])])
+    item = _client_with([section]).find_item("movie", tmdb_id=603)
+    assert item is not None and item.title == "Dune"

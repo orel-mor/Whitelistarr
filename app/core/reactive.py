@@ -132,10 +132,12 @@ class ReactivePoller:
             identifier = int(value)
         except (TypeError, ValueError):
             return None
+        # Resolve through LabelSync so legacy Plex items indexed under a
+        # different id (e.g. imdb-only) still match via the *arr id bridge.
         if source == "tmdb":
-            return self._plex.find_item(media_type, tmdb_id=identifier)
+            return self._sync.resolve_plex_item(media_type, tmdb_id=identifier)
         if source == "tvdb":
-            return self._plex.find_item(media_type, tvdb_id=identifier)
+            return self._sync.resolve_plex_item(media_type, tvdb_id=identifier)
         return None  # imdb-only: same item carries a tmdb/tvdb key handled above
 
     # --- Plex recently-added ------------------------------------------------
