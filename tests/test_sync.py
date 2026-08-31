@@ -42,16 +42,20 @@ class FakePlex:
     def iter_items(self):
         return list(self._items)
 
+    def find_item_by_keys(self, media_type, keys):
+        keys = set(keys)
+        for item in self._items:
+            if item.media_type == media_type and (item.guid_keys() & keys):
+                return item
+        return None
+
     def find_item(self, media_type, tmdb_id=None, tvdb_id=None):
         targets = set()
         if tmdb_id is not None:
             targets.add(f"tmdb:{tmdb_id}")
         if tvdb_id is not None:
             targets.add(f"tvdb:{tvdb_id}")
-        for item in self._items:
-            if item.media_type == media_type and (item.guid_keys() & targets):
-                return item
-        return None
+        return self.find_item_by_keys(media_type, targets)
 
     def fetch_labelable(self, rating_key):
         for item in self._items:
@@ -120,6 +124,26 @@ def test_sync_by_ids_finds_and_labels_item():
 def test_sync_by_ids_returns_false_when_not_found():
     sync = make_sync(FakePlex([]))
     assert sync.sync_by_ids("movie", tmdb_id=999) is False
+
+
+def test_sync_by_ids_bridges_tmdb_request_to_imdb_only_legacy_item():
+    # Legacy movie carries only an imdb guid; Seerr requests it by tmdb. Radarr
+    # knows both ids, so the tmdb request must bridge to the imdb-only Plex item.
+    item = FakePlexItem("Train Dreams", "movie", labels=set(), guid_keys={"imdb:tt29768334"})
+    sync = make_sync(
+        FakePlex([item]),
+        radarr_entries=[({"tmdb:29768334", "imdb:tt29768334"}, ["family"])],
+    )
+    assert sync.sync_by_ids("movie", tmdb_id=29768334) is True
+    assert item.labels() == {"shared"}
+
+
+def test_resolve_plex_item_falls_back_to_bare_id_when_not_in_arr():
+    # No *arr record to bridge through -> the bare id must still resolve a
+    # modern Plex item indexed under that same id.
+    item = FakePlexItem("Dune", "movie", labels=set(), guid_keys={"tmdb:603"})
+    sync = make_sync(FakePlex([item]))
+    assert sync.resolve_plex_item("movie", tmdb_id=603) is item
 
 
 def test_sync_by_rating_key_labels_item():

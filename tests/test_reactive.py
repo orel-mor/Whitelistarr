@@ -38,16 +38,20 @@ class FakePlex:
     def iter_items(self):
         return list(self._items)
 
+    def find_item_by_keys(self, media_type, keys):
+        keys = set(keys)
+        for item in self._items:
+            if item.media_type == media_type and (item.guid_keys() & keys):
+                return item
+        return None
+
     def find_item(self, media_type, tmdb_id=None, tvdb_id=None):
         targets = set()
         if tmdb_id is not None:
             targets.add(f"tmdb:{tmdb_id}")
         if tvdb_id is not None:
             targets.add(f"tvdb:{tvdb_id}")
-        for item in self._items:
-            if item.media_type == media_type and (item.guid_keys() & targets):
-                return item
-        return None
+        return self.find_item_by_keys(media_type, targets)
 
     def recently_added(self, since, cap=100):
         out = [
@@ -121,6 +125,18 @@ def test_no_arr_change_means_no_reaction():
     assert summary["tag_changes"] == 0
     # baseline never labeled it, and nothing changed since
     assert item.labels() == set()
+
+
+def test_tag_change_bridges_to_imdb_only_legacy_item():
+    # Legacy movie indexed under imdb only; Radarr key is tmdb. The tmdb tag
+    # change must still resolve the Plex item via the imdb sibling id.
+    item = FakePlexItem("Train Dreams", "movie", set(), {"imdb:tt1"}, rating_key="1")
+    radarr = FakeArr([({"tmdb:99", "imdb:tt1"}, [])])
+    poller = make_poller(FakePlex([item]), radarr=radarr, now=datetime(2026, 1, 1))
+    poller.poll()                                    # baseline
+    radarr.set([({"tmdb:99", "imdb:tt1"}, ["kids"])])  # tag added
+    poller.poll()
+    assert item.labels() == {"kids-allowed"}
 
 
 def test_show_tag_change_uses_sonarr_media_type():
